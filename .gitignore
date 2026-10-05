@@ -3,4 +3,11 @@ reports/
 .DS_Store
 xcuserdata/
 .claude/
-.mobai/
+.mobai/*
+!.mobai/preview/
+.mobai/preview/*
+!.mobai/preview/swiftui/
+.mobai/preview/swiftui/*
+!.mobai/preview/swiftui/.gitignore
+!.mobai/preview/swiftui/sources/
+!.mobai/preview/swiftui/sources/**
