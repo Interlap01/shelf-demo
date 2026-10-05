@@ -2,6 +2,11 @@ name: E2E (iOS simulator)
 
 on:
   workflow_dispatch:
+    inputs:
+      live:
+        description: Show the run in MobAI Live View
+        type: boolean
+        default: true
 
 jobs:
   e2e:
@@ -27,7 +32,7 @@ jobs:
           mobai-ci test ./tests --app "$APP_PATH" \
             --device "$MOBAI_SIM_UDID" --wait-device 4m \
             --recording --device-logs --progress \
-            --live --hold-on-failure 10m \
+            ${{ inputs.live && '--live --hold-on-failure 10m' || '' }} \
             --output reports
 
       - uses: actions/upload-artifact@v4
