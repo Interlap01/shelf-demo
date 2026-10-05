@@ -1,0 +1,8 @@
+# Sign in with the test account
+app "run.mobai.shelf" fresh
+tap "Sign in"
+wait_for "Email"
+type "Email" → "alice@example.com"
+type "Password" → "hunter22"
+tap "Get started"
+wait_for "Welcome, Alice"

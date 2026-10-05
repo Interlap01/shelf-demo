@@ -1,0 +1,37 @@
+name: E2E (iOS simulator)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: MobAI-App/mobai-ci@v1
+        with:
+          boot-sim: true
+
+      - name: Build Shelf for the simulator
+        run: |
+          xcodebuild -project Shelf.xcodeproj -scheme Shelf \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug -derivedDataPath build build
+          echo "APP_PATH=$(find build/Build/Products -name '*.app' -type d | head -1)" >> "$GITHUB_ENV"
+
+      - name: Run tests
+        env:
+          MOBAI_API_KEY: ${{ secrets.MOBAI_API_KEY }}
+        run: |
+          mobai-ci test ./tests --app "$APP_PATH" \
+            --device "$MOBAI_SIM_UDID" --wait-device 4m \
+            --recording --device-logs --progress \
+            --live --hold-on-failure 10m \
+            --output reports
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mobai-reports
+          path: reports

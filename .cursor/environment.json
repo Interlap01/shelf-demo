@@ -1,0 +1,3 @@
+{
+  "install": "curl -fsSL https://mobai.run/cloud/install.sh | sh"
+}

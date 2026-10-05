@@ -1,0 +1,12 @@
+# Checkout: a signed-in user adds an item and sees the total
+app "run.mobai.shelf" fresh
+tap "Sign in"
+wait_for "Email"
+type "Email" → "alice@example.com"
+type "Password" → "hunter22"
+tap "Continue"
+wait_for "Welcome, Alice"
+tap "Add Ceramic mug to cart"
+tap "Cart" type:button
+assert_exists "Total"
+assert_exists "$18.00"

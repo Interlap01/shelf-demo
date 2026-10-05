@@ -1,0 +1,5 @@
+# Checkout: a signed-in user buys one item
+login: sign in as the test user
+add any item to the cart
+open the cart
+assert: the cart has one item and a total above zero

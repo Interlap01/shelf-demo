@@ -1,0 +1,6 @@
+build/
+reports/
+.DS_Store
+xcuserdata/
+.claude/
+.mobai/
