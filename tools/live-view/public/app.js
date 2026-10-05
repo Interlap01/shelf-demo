@@ -89,20 +89,16 @@ async function tick() {
     const data = await res.json();
     renderSources(data.sources || [], data.sourceId);
 
-    if (String(intervalEl.value) !== String(data.intervalMs)) {
-      // keep user choice unless server drifted oddly
-    }
-
-    if (data.hasFrame && data.frameSeq !== lastSeq) {
-      lastSeq = data.frameSeq;
-      const url = `/api/frame?seq=${data.frameSeq}&t=${Date.now()}`;
-      const img = new Image();
-      img.onload = () => {
-        frameEl.src = url;
-        frameEl.hidden = false;
-        emptyEl.hidden = true;
-      };
-      img.src = url;
+    if (data.hasFrame) {
+      if (data.frameSeq !== lastSeq) {
+        lastSeq = data.frameSeq;
+        frameEl.src = `/api/frame?seq=${data.frameSeq}&t=${Date.now()}`;
+      }
+      frameEl.hidden = false;
+      emptyEl.hidden = true;
+    } else {
+      frameEl.hidden = true;
+      emptyEl.hidden = false;
     }
 
     if (data.capturing) {

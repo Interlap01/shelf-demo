@@ -157,6 +157,11 @@ async function capturePreview(outFile) {
 }
 
 async function captureDevice(deviceId, outFile) {
+  // Bridge usually auto-starts, but an explicit start is cheap and avoids
+  // the first screenshot failing on a freshly shared CI simulator.
+  await run("mobai", ["bridge", "start", "-d", deviceId, "--json"], {
+    timeoutMs: 60000,
+  });
   const dir = path.dirname(outFile);
   const name = path.basename(outFile, path.extname(outFile));
   const r = await run(
