@@ -1,0 +1,10 @@
+# Written by the MobAI SwiftUI preview engine.
+#
+# generated/ is scratch: copies of this project's sources plus a SwiftPM
+# build tree, rebuilt whenever a preview starts. Nothing in it is authored.
+#
+# The rest of this directory IS worth committing. mocks/ are the stand-ins
+# this project supplies for frameworks the engine cannot compile, fixtures/
+# are its canned HTTP responses, and excluded.txt names files to keep out of
+# the build. Those are decisions about this project, not build output.
+generated/
