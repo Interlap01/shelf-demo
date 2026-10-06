@@ -1,3 +1,7 @@
 {
-  "install": "curl -fsSL https://mobai.run/cloud/install.sh | sh"
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "install": "curl -fsSL https://mobai.run/cloud/install.sh | sh",
+  "start": "$HOME/.mobai/bin/mobai-up"
 }
