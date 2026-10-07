@@ -101,6 +101,11 @@ struct ShopView: View {
             VStack(alignment: .leading, spacing: 14) {
                 Text("Welcome, \(store.userName ?? "")")
                     .font(.system(size: 30, weight: .heavy, design: .rounded))
+                FreeShippingProgressBar(
+                    progress: store.freeShippingProgress,
+                    remaining: store.amountToFreeShipping,
+                    unlocked: store.hasFreeShipping
+                )
                 if store.itemCount > 0 {
                     Label("\(store.itemCount) \(store.itemCount == 1 ? "item" : "items") in your cart", systemImage: "cart.fill")
                         .font(.subheadline.weight(.semibold))
@@ -121,6 +126,48 @@ struct ShopView: View {
         .background(Color.paper)
         .navigationTitle("Shop")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+struct FreeShippingProgressBar: View {
+    let progress: Double
+    let remaining: Decimal
+    let unlocked: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: unlocked ? "shippingbox.fill" : "shippingbox")
+                    .accessibilityHidden(true)
+                Text(unlocked
+                     ? "Free shipping unlocked"
+                     : "\(price(remaining)) away from free shipping")
+                    .font(.subheadline.weight(.semibold))
+                Spacer(minLength: 0)
+                Text("over \(price(Store.freeShippingThreshold))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Color.ink.opacity(0.12))
+                    Capsule()
+                        .fill(unlocked ? Color.green : Color.ink)
+                        .frame(width: max(geo.size.width * progress, progress > 0 ? 8 : 0))
+                        .animation(.easeInOut(duration: 0.35), value: progress)
+                }
+            }
+            .frame(height: 8)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(unlocked
+                ? "Free shipping unlocked"
+                : "\(price(remaining)) away from free shipping")
+            .accessibilityValue("\(Int((progress * 100).rounded())) percent")
+        }
+        .padding(14)
+        .background(.white, in: .rect(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(.ink.opacity(0.9), lineWidth: 1.5))
     }
 }
 
