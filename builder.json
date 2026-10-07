@@ -23,7 +23,8 @@
   "mobai": {},
   "profiles": {
     "development": {
-      "distribution": "development"
+      "distribution": "development",
+      "signingSet": "DEVELOPMENT"
     },
     "store": {
       "distribution": "store"
