@@ -9,12 +9,23 @@
   "codemagic": {},
   "bitrise": {},
   "ios": {
-    "scheme": "Shelf"
+    "path": ".",
+    "scheme": "Shelf",
+    "bundleId": "run.mobai.shelf",
+    "configuration": "Debug"
   },
   "flutter": {
     "watch": {}
   },
   "reactNative": {},
   "kmp": {},
-  "mobai": {}
+  "mobai": {},
+  "profiles": {
+    "development": {
+      "distribution": "development"
+    },
+    "store": {
+      "distribution": "store"
+    }
+  }
 }
