@@ -37,9 +37,21 @@ struct CartLine: Identifiable {
 @Observable
 @MainActor
 final class Store {
+    static let freeShippingThreshold: Decimal = 50
+
     var userName: String?
     var lines: [CartLine] = []
     var orderPlaced = false
+
+    var freeShippingProgress: Double {
+        min(1, NSDecimalNumber(decimal: total / Self.freeShippingThreshold).doubleValue)
+    }
+
+    var amountToFreeShipping: Decimal {
+        max(0, Self.freeShippingThreshold - total)
+    }
+
+    var hasFreeShipping: Bool { total >= Self.freeShippingThreshold }
 
     let catalog: [Product] = [
         Product(id: "mug", name: "Ceramic mug", detail: "Stoneware, 350 ml", price: 18, symbol: "cup.and.saucer.fill", tint: .orange),
