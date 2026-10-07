@@ -4,3 +4,7 @@ reports/
 xcuserdata/
 .claude/
 .mobai/
+ios-signing-development.key
+Builder-development-*.mobileprovision
+ios-signing-development.p12
+.mobai-sign/

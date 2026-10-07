@@ -12,6 +12,7 @@
     "path": ".",
     "scheme": "Shelf",
     "bundleId": "run.mobai.shelf",
+    "signing": false,
     "configuration": "Debug"
   },
   "flutter": {
@@ -22,7 +23,8 @@
   "mobai": {},
   "profiles": {
     "development": {
-      "distribution": "development"
+      "distribution": "development",
+      "signingSet": "DEVELOPMENT"
     },
     "store": {
       "distribution": "store"
