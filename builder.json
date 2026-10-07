@@ -12,7 +12,8 @@
     "path": ".",
     "scheme": "Shelf",
     "bundleId": "run.mobai.shelf",
-    "configuration": "Debug"
+    "configuration": "Debug",
+    "signing": true
   },
   "flutter": {
     "watch": {}
