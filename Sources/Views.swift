@@ -109,7 +109,7 @@ struct ShopView: View {
                         .background(.green.opacity(0.15), in: .capsule)
                         .foregroundStyle(.green)
                 }
-                Text("New this week")
+                Text("Fresh on the shelf this week")
                     .font(.headline)
                     .foregroundStyle(.secondary)
                 ForEach(store.catalog) { product in
