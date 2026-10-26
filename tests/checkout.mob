@@ -4,7 +4,7 @@ tap "Sign in"
 wait_for "Email"
 type "Email" → "alice@example.com"
 type "Password" → "hunter22"
-tap "Continue"
+tap "Get started"
 wait_for "Welcome, Alice"
 tap "Add Ceramic mug to cart"
 tap "Cart" type:button
