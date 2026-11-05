@@ -1,0 +1,9 @@
+app "run.mobai.shelf" fresh
+screenshot "home"
+tap "Sign in"
+wait_for "Email"
+type "Email" → "alice@example.com"
+type "Password" → "hunter22"
+tap "Get started"
+wait_for "Welcome, Alice"
+screenshot "signed in"

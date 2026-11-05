@@ -1,0 +1,89 @@
+name: MobAI tests
+
+# Runs the app's MobAI tests on an iOS simulator, and
+# reports each run to the app's Testing project, where the MobAI app shows
+# it. Added by MobAI App Builder; edit it freely.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - "main"
+  workflow_dispatch:
+
+concurrency:
+  group: mobai-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Until a test is committed there is nothing to run, so the device jobs
+  # below are skipped instead of building the app for nothing.
+  tests:
+    runs-on: ubuntu-latest
+    outputs:
+      found: ${{ steps.find.outputs.found }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Find tests
+        id: find
+        run: |
+          cd "$GITHUB_WORKSPACE/."
+          if [ -n "$(find 'tests' -name '*.mob' 2>/dev/null | head -1)" ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::No MobAI tests yet. They run here once one is committed."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  ios:
+    needs: tests
+    if: needs.tests.outputs.found == 'true'
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      # Installs mobai-ci and boots a simulator.
+      - uses: MobAI-App/mobai-ci@v1
+        with:
+          boot-sim: true
+
+      # Set SCHEME to build another scheme than the one found here.
+      - name: Build for the simulator
+        env:
+          SCHEME: ""
+        run: |
+          set -e
+          cd "$GITHUB_WORKSPACE/."
+          WORKSPACE=$(find . -maxdepth 1 -name '*.xcworkspace' | head -1)
+          if [ -n "$WORKSPACE" ]; then
+            TARGET="-workspace $WORKSPACE"
+            [ -n "$SCHEME" ] || SCHEME=$(basename "$WORKSPACE" .xcworkspace)
+          else
+            PROJECT=$(find . -maxdepth 1 -name '*.xcodeproj' | head -1)
+            TARGET="-project $PROJECT"
+            [ -n "$SCHEME" ] || SCHEME=$(xcodebuild -list -json -project "$PROJECT" | jq -r '.project.schemes[0]')
+          fi
+          echo "Building $SCHEME"
+          xcodebuild $TARGET -scheme "$SCHEME" -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
+          echo "APP_PATH=$PWD/$(find build/Build/Products -maxdepth 2 -name '*.app' -type d | head -1)" >> "$GITHUB_ENV"
+
+
+      - name: Run tests
+        env:
+          MOBAI_API_KEY: ${{ secrets.MOBAI_API_KEY }}
+        run: |
+          cd "$GITHUB_WORKSPACE/."
+          # Pull requests from forks get no secrets: they run, without a report.
+          REPORT=""
+          [ -z "$MOBAI_API_KEY" ] || REPORT="--report mobai --project 3e024e10-d26b-4198-9960-3ddabf321c7f"
+          mobai-ci test 'tests' --root . --app "$APP_PATH" --device "$MOBAI_SIM_UDID" \
+            --wait-device 4m --output mobai-ci-out $REPORT
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: mobai-tests-ios
+          path: "mobai-ci-out"

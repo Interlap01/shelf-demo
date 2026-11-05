@@ -1,0 +1,20 @@
+{
+  "project": "Shelf",
+  "platform": "ios",
+  "github": {
+    "owner": "Interlap01",
+    "repo": "shelf-demo"
+  },
+  "provider": "github",
+  "codemagic": {},
+  "bitrise": {},
+  "ios": {
+    "scheme": "Shelf"
+  },
+  "flutter": {
+    "watch": {}
+  },
+  "reactNative": {},
+  "kmp": {},
+  "mobai": {}
+}
