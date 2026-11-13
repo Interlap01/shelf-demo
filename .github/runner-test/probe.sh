@@ -159,6 +159,30 @@ EOF
   sleep $(( ${HOLD_MINUTES:-25} * 60 - ($(date +%s) - HOLD_START) ))
   curl -s -X DELETE "$API/simulators/s1" >/dev/null
   for _ in $(seq 1 60); do kill -0 "$PID" 2>/dev/null || break; sleep 2; done
+  # OCR_CHECK: text drawn on a canvas is not in the accessibility tree, so
+  # tapping it goes through OCR. Once as this runner (github-hosted: text only,
+  # no icon scan) and once claiming self-hosted (icons scanned on this Mac),
+  # with the CPU each mobai-ci test used.
+  if [ "${OCR_CHECK:-0}" = 1 ]; then
+    echo "RUNNER_ENVIRONMENT=${RUNNER_ENVIRONMENT:-unset}"
+    mkdir -p anim ocrcheck
+    cat > anim/ocr.html <<'EOF'
+<meta name="viewport" content="width=device-width">
+<body style="margin:0"><canvas id="c" width="390" height="700"></canvas>
+<script>const g=document.getElementById('c').getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,390,700);
+g.fillStyle='#000';g.font='bold 40px -apple-system';g.fillText('OCRCHECK',90,300);</script>
+EOF
+    pgrep -f "http.server 8765" >/dev/null || (cd anim && python3 -m http.server 8765 --bind 127.0.0.1 >/dev/null 2>&1 &)
+    printf '# Canvas text, found only through OCR\ntap "OCRCHECK"\n' > ocrcheck/ocr-check.mob
+    for envname in github-hosted self-hosted; do
+      xcrun simctl openurl "$MOBAI_SIM_UDID" http://127.0.0.1:8765/ocr.html
+      sleep 5
+      echo "::group::OCR check as $envname"
+      RUNNER_ENVIRONMENT=$envname /usr/bin/time -l ./bin/mobai-ci test ocrcheck --root . --device "$MOBAI_SIM_UDID" --timeout 4m 2>&1 \
+        | grep -E "pass|fail|PASS|FAIL|OCR|ocr|real|user|sys|maximum resident|error" | head -20
+      echo "::endgroup::"
+    done
+  fi
   exit 0
 fi
 

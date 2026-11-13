@@ -47,6 +47,7 @@ jobs:
           HOLD: "1"
           HOLD_MINUTES: "8"
           PHASES: "1"
+          OCR_CHECK: "1"
           END_HOLD_MINUTES: "5"
         run: bash .github/runner-test/probe.sh
 
