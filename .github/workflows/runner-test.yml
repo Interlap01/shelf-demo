@@ -1,0 +1,53 @@
+name: Runner test
+
+# Tries mobai-ci runner on a GitHub macOS runner: an xcfast build, three
+# simulators on one checkout, a rebuild. The binaries come from the draft
+# release "runner-test".
+on:
+  push:
+    branches: [runner-test]
+
+jobs:
+  runner:
+    runs-on: macos-latest
+    timeout-minutes: 50
+    permissions:
+      contents: write # reads the draft release
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install mobai-ci + boot simulator
+        uses: MobAI-App/mobai-ci@v1
+        with:
+          boot-sim: true
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Download the test build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download runner-test -R "$GITHUB_REPOSITORY" -D bin
+          chmod +x bin/*
+
+      - name: Restore the xcfast cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.xcfast
+          key: xcfast-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: xcfast-
+
+      - name: Run and probe
+        env:
+          MOBAI_API_KEY: ${{ secrets.MOBAI_API_KEY }}
+        run: bash .github/runner-test/probe.sh
+
+      - name: Save the xcfast cache
+        if: always()
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.xcfast
+          key: xcfast-${{ github.run_id }}-${{ github.run_attempt }}
