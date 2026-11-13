@@ -58,7 +58,7 @@ mem "before"
 ./bin/mobai-ci runner --xcfast "$PWD/bin/xcfast" --device "$MOBAI_SIM_UDID" --wait-device 4m \
   --duration 45m --max-duration 50m --max-simulators 3 \
   --label "${GITHUB_REPOSITORY} runner test" 2>&1 \
-  | while IFS= read -r l; do echo "$(date -u +%H:%M:%S) $l"; done > runner.log &
+  | while IFS= read -r l; do echo "$(date -u +%H:%M:%S) $l"; done | tee runner.log | sed 's/^/RUNNER /' &
 PID=$!
 trap 'echo "::group::runner log"; cat runner.log; echo "::endgroup::"; echo "::group::tunnel log"; cat "${TMPDIR:-/tmp}"/mobai-ci-tunnel-*.log; echo "::endgroup::"' EXIT
 
