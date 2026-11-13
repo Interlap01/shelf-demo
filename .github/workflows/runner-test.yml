@@ -44,7 +44,7 @@ jobs:
         env:
           MOBAI_API_KEY: ${{ secrets.MOBAI_API_KEY }}
           HOLD: "1"
-          HOLD_MINUTES: "15"
+          HOLD_MINUTES: "30"
           END_HOLD_MINUTES: "5"
         run: bash .github/runner-test/probe.sh
 
