@@ -11,6 +11,10 @@ jobs:
   runner:
     runs-on: macos-latest
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        max_fps: [0, 30]
     permissions:
       contents: write # reads the draft release
     steps:
@@ -47,7 +51,7 @@ jobs:
           HOLD: "1"
           HOLD_MINUTES: "8"
           PHASES: "1"
-          OCR_CHECK: "1"
+          MAX_FPS: ${{ matrix.max_fps }}
           END_HOLD_MINUTES: "5"
         run: bash .github/runner-test/probe.sh
 
@@ -56,4 +60,4 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: ~/.xcfast
-          key: xcfast-${{ github.run_id }}-${{ github.run_attempt }}
+          key: xcfast-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.max_fps }}

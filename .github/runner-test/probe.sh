@@ -65,8 +65,8 @@ if [ "${PHASES:-0}" = 1 ]; then
   snap() { ps -axo pid=,ppid=,user=,time=,rss=,args= > "snaps/$1.txt"; }
   upload() {
     cp cpu.log runner.log snaps/
-    tar czf snaps.tgz snaps
-    gh release upload runner-test snaps.tgz --clobber -R "$GITHUB_REPOSITORY" >/dev/null 2>&1
+    tar czf "snaps-fps${MAX_FPS:-30}.tgz" snaps
+    gh release upload runner-test "snaps-fps${MAX_FPS:-30}.tgz" --clobber -R "$GITHUB_REPOSITORY" >/dev/null 2>&1
   }
   ( while :; do
       { echo "CPU $(date -u +%H:%M:%S) load $(sysctl -n vm.loadavg) swap used $(sysctl -n vm.swapusage | awk '{print $6}')"
@@ -86,8 +86,8 @@ fi
 # --duration is long so no simulator closes for being unused mid-test.
 # Every runner line gets the time, to line it up with the viewer's side.
 ./bin/mobai-ci runner --xcfast "$PWD/bin/xcfast" --device "$MOBAI_SIM_UDID" --wait-device 4m \
-  --duration 45m --max-duration 50m --max-simulators 3 \
-  --label "${GITHUB_REPOSITORY} runner test" 2>&1 \
+  --duration 45m --max-duration 50m --max-simulators 3 --max-fps "${MAX_FPS:-30}" \
+  --label "${GITHUB_REPOSITORY} runner test fps${MAX_FPS:-30}" 2>&1 \
   | while IFS= read -r l; do echo "$(date -u +%H:%M:%S) $l"; done | tee runner.log | sed 's/^/RUNNER /' &
 PID=$!
 trap 'echo "::group::runner log"; cat runner.log; echo "::endgroup::"; echo "::group::tunnel log"; cat "${TMPDIR:-/tmp}"/mobai-ci-tunnel-*.log; echo "::endgroup::"' EXIT
