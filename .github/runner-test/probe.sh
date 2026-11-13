@@ -60,7 +60,7 @@ mem "before"
   --label "${GITHUB_REPOSITORY} runner test" 2>&1 \
   | while IFS= read -r l; do echo "$(date -u +%H:%M:%S) $l"; done > runner.log &
 PID=$!
-trap 'echo "::group::runner log"; cat runner.log; echo "::endgroup::"' EXIT
+trap 'echo "::group::runner log"; cat runner.log; echo "::endgroup::"; echo "::group::tunnel log"; cat "${TMPDIR:-/tmp}"/mobai-ci-tunnel-*.log; echo "::endgroup::"' EXIT
 
 # HOLD: only the first simulator, kept up for someone to watch.
 if [ "${HOLD:-}" = 1 ]; then
