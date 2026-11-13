@@ -54,11 +54,22 @@ echo "xcfast cache before: $(du -sh ~/.xcfast 2>/dev/null | cut -f1 || echo none
 mem "before"
 
 # --duration is long so no simulator closes for being unused mid-test.
+# Every runner line gets the time, to line it up with the viewer's side.
 ./bin/mobai-ci runner --xcfast "$PWD/bin/xcfast" --device "$MOBAI_SIM_UDID" --wait-device 4m \
   --duration 45m --max-duration 50m --max-simulators 3 \
-  --label "${GITHUB_REPOSITORY} runner test" > runner.log 2>&1 &
+  --label "${GITHUB_REPOSITORY} runner test" 2>&1 \
+  | while IFS= read -r l; do echo "$(date -u +%H:%M:%S) $l"; done > runner.log &
 PID=$!
 trap 'echo "::group::runner log"; cat runner.log; echo "::endgroup::"' EXIT
+
+# HOLD: only the first simulator, kept up for someone to watch.
+if [ "${HOLD:-}" = 1 ]; then
+  wait_ready s1 1200 && echo "STAGE s1 ready $(since "$T0") after start"
+  sleep $(( ${HOLD_MINUTES:-25} * 60 ))
+  curl -s -X DELETE "$API/simulators/s1" >/dev/null
+  for _ in $(seq 1 60); do kill -0 "$PID" 2>/dev/null || break; sleep 2; done
+  exit 0
+fi
 
 # The first simulator: xcfast build, then shared.
 if wait_ready s1 1200; then
