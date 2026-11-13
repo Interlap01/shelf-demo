@@ -66,6 +66,40 @@ trap 'echo "::group::runner log"; cat runner.log; echo "::endgroup::"; echo "::g
 if [ "${HOLD:-}" = 1 ]; then
   wait_ready s1 1200 && echo "STAGE s1 ready $(since "$T0") after start"
   HOLD_START=$(date +%s)
+  # PHASES: what takes the CPU. Every 5s the load, swap and the top processes;
+  # the phases change one thing at a time: a viewer (on the developer's
+  # computer, joining at B and leaving at D) and a page that redraws every frame.
+  if [ "${PHASES:-0}" = 1 ]; then
+    ( while :; do
+        echo "CPU $(date -u +%H:%M:%S) load $(sysctl -n vm.loadavg) swap used $(sysctl -n vm.swapusage | awk '{print $6}')"
+        top -l 2 -s 2 -n 10 -o cpu -stats pid,command,cpu,mem,threads \
+          | awk '/^CPU usage/{u++; if(u==2) print "CPU   " $0} /^PID/{c++; next} c==2&&NF{print "CPU   " $0}'
+        sleep 3
+      done ) &
+    SAMPLER=$!
+    mkdir -p anim
+    cat > anim/index.html <<'EOF'
+<meta name="viewport" content="width=device-width">
+<style>body{margin:0;font:700 64px -apple-system;display:grid;place-items:center;height:100vh}
+#b{width:160px;height:160px;background:#e33;animation:s 1s linear infinite}
+@keyframes s{to{transform:rotate(360deg)}}</style>
+<div><div id="b"></div><p id="n">0</p></div>
+<script>let i=0;(function f(){document.getElementById('n').textContent=++i;requestAnimationFrame(f)})()</script>
+EOF
+    (cd anim && python3 -m http.server 8765 --bind 127.0.0.1 >/dev/null 2>&1 &)
+    phase() { echo "PHASE $1 $(date -u +%H:%M:%S)"; }
+    phase "A: still, nobody watching"; sleep 60
+    phase "B: still, watched"; sleep 90
+    phase "C: animation, watched"
+    xcrun simctl openurl "$MOBAI_SIM_UDID" http://127.0.0.1:8765/ &
+    sleep 120
+    phase "D: animation, nobody watching"; sleep 90
+    phase "E: app, nobody watching"
+    ( xcrun simctl terminate "$MOBAI_SIM_UDID" com.apple.mobilesafari; xcrun simctl launch "$MOBAI_SIM_UDID" run.mobai.shelf ) &
+    sleep 60
+    phase "end"
+    kill "$SAMPLER"
+  fi
   # ANIMATE: a page that redraws every frame, so the stream's frame rate can be
   # measured without anyone driving. Then the app comes back.
   if [ "${ANIMATE_SECONDS:-0}" -gt 0 ]; then
