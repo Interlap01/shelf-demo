@@ -81,7 +81,7 @@ fi
 
 if [ $FAILED = 0 ]; then
   T=$(date +%s)
-  curl -s -X POST "$API/simulators" -H 'Content-Type: application/json' -d '{"slim":"auto"}' | jq -c .
+  curl -s -X POST "$API/simulators" -H 'Content-Type: application/json' -d '{}' | jq -c .
   if wait_ready s2 900; then
     echo "STAGE s2 (slim auto) ready in $(since "$T")"
     mem "2 simulators"
@@ -95,15 +95,18 @@ if [ $FAILED = 0 ]; then
   rebuild s2 || FAILED=1
 
   T=$(date +%s)
-  curl -s -X POST "$API/simulators" -H 'Content-Type: application/json' -d '{"slim":"stock"}' | jq -c .
+  curl -s -X POST "$API/simulators" -H 'Content-Type: application/json' -d '{}' | jq -c .
   if wait_ready s3 900; then
-    echo "STAGE s3 (stock) ready in $(since "$T")"
+    echo "STAGE s3 (slim auto) ready in $(since "$T")"
     mem "3 simulators"
   else FAILED=1; fi
 
   curl -s "$API/simulators" | jq -c '.simulators[] | {id, state}'
   code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API/simulators" -d '{}')
   echo "LIMIT a 4th simulator answers $code (409 expected while 3 run)"
+  # Time to watch the three in the MobAI app.
+  sleep $(( ${END_HOLD_MINUTES:-0} * 60 ))
+  mem "end"
 
   curl -s "$API/simulators" | jq -c '.simulators[] | {id, state, slim, primary}'
 fi

@@ -43,8 +43,8 @@ jobs:
       - name: Run and probe
         env:
           MOBAI_API_KEY: ${{ secrets.MOBAI_API_KEY }}
-          HOLD: "1"
-          HOLD_MINUTES: "25"
+          HOLD: "0"
+          END_HOLD_MINUTES: "5"
         run: bash .github/runner-test/probe.sh
 
       - name: Save the xcfast cache
