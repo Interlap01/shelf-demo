@@ -53,6 +53,36 @@ echo "machine: $(sysctl -n hw.ncpu) cores ($(sysctl -n hw.perflevel0.logicalcpu 
 echo "xcfast cache before: $(du -sh ~/.xcfast 2>/dev/null | cut -f1 || echo none)"
 mem "before"
 
+# PHASES: CPU from the job's start. Every 5s the load, swap and the top
+# processes, and every process at each stage (S: the runner starts, then each
+# phase): the difference in CPU time between two lists is each process's CPU
+# seconds in between. All of it goes to the draft release every 15s, since a
+# machine that hangs never hands its job log back.
+if [ "${PHASES:-0}" = 1 ]; then
+  : > cpu.log
+  : > runner.log
+  mkdir -p snaps
+  snap() { ps -axo pid=,ppid=,user=,time=,rss=,args= > "snaps/$1.txt"; }
+  upload() {
+    cp cpu.log runner.log snaps/
+    tar czf snaps.tgz snaps
+    gh release upload runner-test snaps.tgz --clobber -R "$GITHUB_REPOSITORY" >/dev/null 2>&1
+  }
+  ( while :; do
+      { echo "CPU $(date -u +%H:%M:%S) load $(sysctl -n vm.loadavg) swap used $(sysctl -n vm.swapusage | awk '{print $6}')"
+        top -l 2 -s 2 -n 12 -o cpu -stats pid,command,cpu,mem,threads \
+          | awk '/^CPU usage/{u++; if(u==2) print "CPU   " $0} /^PID/{c++; next} c==2&&NF{print "CPU   " $0}'
+        grep -hE "stream: [0-9.]+ fps" runner.log | tail -1
+      } | tee -a cpu.log
+      sleep 3
+    done ) &
+  SAMPLER=$!
+  ( while :; do sleep 15; upload; done ) &
+  UPLOADER=$!
+  snap S
+  echo "PHASE S: runner starts $(date -u +%H:%M:%S)" | tee -a cpu.log
+fi
+
 # --duration is long so no simulator closes for being unused mid-test.
 # Every runner line gets the time, to line it up with the viewer's side.
 ./bin/mobai-ci runner --xcfast "$PWD/bin/xcfast" --device "$MOBAI_SIM_UDID" --wait-device 4m \
@@ -70,29 +100,6 @@ if [ "${HOLD:-}" = 1 ]; then
   # the phases change one thing at a time: a viewer (on the developer's
   # computer, joining at B and leaving at D) and a page that redraws every frame.
   if [ "${PHASES:-0}" = 1 ]; then
-    # The samples also go to the draft release every 15s: a machine that hangs
-    # never hands its job log back.
-    : > cpu.log
-    ( while :; do
-        { echo "CPU $(date -u +%H:%M:%S) load $(sysctl -n vm.loadavg) swap used $(sysctl -n vm.swapusage | awk '{print $6}')"
-          top -l 2 -s 2 -n 12 -o cpu -stats pid,command,cpu,mem,threads \
-            | awk '/^CPU usage/{u++; if(u==2) print "CPU   " $0} /^PID/{c++; next} c==2&&NF{print "CPU   " $0}'
-          grep -hE "stream: [0-9.]+ fps" runner.log | tail -1
-        } | tee -a cpu.log
-        sleep 3
-      done ) &
-    SAMPLER=$!
-    # Every process at each phase boundary: the difference in CPU time between
-    # two lists is each process's CPU seconds in that phase.
-    mkdir -p snaps
-    snap() { ps -axo pid=,ppid=,user=,time=,rss=,args= > "snaps/$1.txt"; }
-    upload() {
-      cp cpu.log snaps/cpu.log
-      tar czf snaps.tgz snaps
-      gh release upload runner-test snaps.tgz --clobber -R "$GITHUB_REPOSITORY" >/dev/null 2>&1
-    }
-    ( while :; do sleep 15; upload; done ) &
-    UPLOADER=$!
     mkdir -p anim
     cat > anim/index.html <<'EOF'
 <meta name="viewport" content="width=device-width">
@@ -104,7 +111,15 @@ if [ "${HOLD:-}" = 1 ]; then
 EOF
     (cd anim && python3 -m http.server 8765 --bind 127.0.0.1 >/dev/null 2>&1 &)
     phase() { snap "${1%%:*}"; echo "PHASE $1 $(date -u +%H:%M:%S)" | tee -a cpu.log; }
-    phase "A: still, nobody watching"; sleep 60
+    phase "A: still, nobody watching"
+    # What the runner itself does after it shared the simulator (the test
+    # build keeps its symbols, so sample names Go functions).
+    RPID=$(pgrep -f "bin/mobai-ci runner" | head -1)
+    sleep 3
+    sample "$RPID" 10 -file snaps/sample-mobai-ci-1.txt >/dev/null 2>&1
+    sleep 15
+    sample "$RPID" 10 -file snaps/sample-mobai-ci-2.txt >/dev/null 2>&1
+    sleep 22
     phase "B: still, watched"; sleep 90
     phase "C: animation, watched"
     xcrun simctl openurl "$MOBAI_SIM_UDID" http://127.0.0.1:8765/ &
