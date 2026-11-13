@@ -82,11 +82,16 @@ if [ "${HOLD:-}" = 1 ]; then
         sleep 3
       done ) &
     SAMPLER=$!
-    ( while :; do
-        sleep 15
-        cp cpu.log cpu-upload.log
-        gh release upload runner-test cpu-upload.log --clobber -R "$GITHUB_REPOSITORY" >/dev/null 2>&1
-      done ) &
+    # Every process at each phase boundary: the difference in CPU time between
+    # two lists is each process's CPU seconds in that phase.
+    mkdir -p snaps
+    snap() { ps -axo pid=,ppid=,user=,time=,rss=,args= > "snaps/$1.txt"; }
+    upload() {
+      cp cpu.log snaps/cpu.log
+      tar czf snaps.tgz snaps
+      gh release upload runner-test snaps.tgz --clobber -R "$GITHUB_REPOSITORY" >/dev/null 2>&1
+    }
+    ( while :; do sleep 15; upload; done ) &
     UPLOADER=$!
     mkdir -p anim
     cat > anim/index.html <<'EOF'
@@ -98,18 +103,22 @@ if [ "${HOLD:-}" = 1 ]; then
 <script>let i=0;(function f(){document.getElementById('n').textContent=++i;requestAnimationFrame(f)})()</script>
 EOF
     (cd anim && python3 -m http.server 8765 --bind 127.0.0.1 >/dev/null 2>&1 &)
-    phase() { echo "PHASE $1 $(date -u +%H:%M:%S)" | tee -a cpu.log; }
+    phase() { snap "${1%%:*}"; echo "PHASE $1 $(date -u +%H:%M:%S)" | tee -a cpu.log; }
     phase "A: still, nobody watching"; sleep 60
     phase "B: still, watched"; sleep 90
     phase "C: animation, watched"
     xcrun simctl openurl "$MOBAI_SIM_UDID" http://127.0.0.1:8765/ &
-    sleep 60
+    sleep 30
+    # What diagnosticd is busy with (the Mac's runs as root).
+    for p in $(pgrep -x diagnosticd); do sudo sample "$p" 3 -file "snaps/sample-diagnosticd-$p.txt" >/dev/null 2>&1 & done
+    sleep 30
     phase "D: animation, nobody watching"; sleep 60
     phase "E: app, nobody watching"
     ( xcrun simctl terminate "$MOBAI_SIM_UDID" com.apple.mobilesafari; xcrun simctl launch "$MOBAI_SIM_UDID" run.mobai.shelf ) &
     sleep 60
     phase "end"
     kill "$SAMPLER" "$UPLOADER"
+    upload
   fi
   # ANIMATE: a page that redraws every frame, so the stream's frame rate can be
   # measured without anyone driving. Then the app comes back.
