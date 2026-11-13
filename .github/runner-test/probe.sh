@@ -65,7 +65,29 @@ trap 'echo "::group::runner log"; cat runner.log; echo "::endgroup::"; echo "::g
 # HOLD: only the first simulator, kept up for someone to watch.
 if [ "${HOLD:-}" = 1 ]; then
   wait_ready s1 1200 && echo "STAGE s1 ready $(since "$T0") after start"
-  sleep $(( ${HOLD_MINUTES:-25} * 60 ))
+  HOLD_START=$(date +%s)
+  # ANIMATE: a page that redraws every frame, so the stream's frame rate can be
+  # measured without anyone driving. Then the app comes back.
+  if [ "${ANIMATE_SECONDS:-0}" -gt 0 ]; then
+    mkdir -p anim
+    cat > anim/index.html <<'EOF'
+<meta name="viewport" content="width=device-width">
+<style>body{margin:0;font:700 64px -apple-system;display:grid;place-items:center;height:100vh}
+#b{width:160px;height:160px;background:#e33;animation:s 1s linear infinite}
+@keyframes s{to{transform:rotate(360deg)}}</style>
+<div><div id="b"></div><p id="n">0</p></div>
+<script>let i=0;(function f(){document.getElementById('n').textContent=++i;requestAnimationFrame(f)})()</script>
+EOF
+    (cd anim && python3 -m http.server 8765 --bind 127.0.0.1 >/dev/null 2>&1 &)
+    sleep "${ANIMATE_DELAY:-60}"
+    echo "ANIMATE start $(date -u +%H:%M:%S)"
+    xcrun simctl openurl "$MOBAI_SIM_UDID" http://127.0.0.1:8765/
+    sleep "$ANIMATE_SECONDS"
+    xcrun simctl terminate "$MOBAI_SIM_UDID" com.apple.mobilesafari
+    xcrun simctl launch "$MOBAI_SIM_UDID" run.mobai.shelf
+    echo "ANIMATE end $(date -u +%H:%M:%S)"
+  fi
+  sleep $(( ${HOLD_MINUTES:-25} * 60 - ($(date +%s) - HOLD_START) ))
   curl -s -X DELETE "$API/simulators/s1" >/dev/null
   for _ in $(seq 1 60); do kill -0 "$PID" 2>/dev/null || break; sleep 2; done
   exit 0
