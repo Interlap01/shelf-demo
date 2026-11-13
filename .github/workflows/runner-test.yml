@@ -45,8 +45,7 @@ jobs:
           MOBAI_API_KEY: ${{ secrets.MOBAI_API_KEY }}
           GH_TOKEN: ${{ github.token }}
           HOLD: "1"
-          HOLD_MINUTES: "8"
-          PHASES: "1"
+          HOLD_MINUTES: "30"
           END_HOLD_MINUTES: "5"
         run: bash .github/runner-test/probe.sh
 
