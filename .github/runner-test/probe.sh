@@ -18,17 +18,6 @@ mem() {
          label, (a+w+c)*p/2^30, a*p/2^30, w*p/2^30, c*p/2^30, f*p/2^30}'
   echo "    swap: $(sysctl -n vm.swapusage)"
 }
-# simrss UDID: resident memory of one simulator, its launchd_sim and below.
-simrss() {
-  local root
-  root=$(pgrep -f "launchd_sim.*$1" | head -1)
-  [ -n "$root" ] || { echo "?"; return; }
-  ps -axo pid=,ppid=,rss= | awk -v r="$root" '
-    {rss[$1]=$3; kids[$2]=kids[$2]" "$1}
-    END {n=split(r,st," "); sum=0; while (n>0) {p=st[n]; n--; sum+=rss[p];
-         m=split(kids[p],k," "); for (i=1;i<=m;i++) {n++; st[n]=k[i]}}
-         printf "%.2f GB", sum/2^20}'
-}
 state() { curl -s "$API/simulators/$1" | jq -r '.state // empty'; }
 wait_ready() { # id timeout
   local end=$(( $(date +%s) + $2 )) s
@@ -45,6 +34,7 @@ wait_ready() { # id timeout
 }
 rebuild() { # id
   local start end s
+  [ "$(state "$1")" = ready ] || { echo "!! REBUILD $1 is $(state "$1"), not ready"; return 1; }
   start=$(date +%s)
   curl -s -X POST "$API/simulators/$1/host/rebuild" -H 'Content-Type: application/json' -d '{}' >/dev/null
   end=$(( start + 900 ))
@@ -63,16 +53,17 @@ echo "machine: $(sysctl -n hw.ncpu) cores ($(sysctl -n hw.perflevel0.logicalcpu 
 echo "xcfast cache before: $(du -sh ~/.xcfast 2>/dev/null | cut -f1 || echo none)"
 mem "before"
 
+# --duration is long so no simulator closes for being unused mid-test.
 ./bin/mobai-ci runner --xcfast "$PWD/bin/xcfast" --device "$MOBAI_SIM_UDID" --wait-device 4m \
-  --duration 10m --max-duration 30m --max-simulators 3 \
+  --duration 45m --max-duration 50m --max-simulators 3 \
   --label "${GITHUB_REPOSITORY} runner test" > runner.log 2>&1 &
 PID=$!
+trap 'echo "::group::runner log"; cat runner.log; echo "::endgroup::"' EXIT
 
 # The first simulator: xcfast build, then shared.
 if wait_ready s1 1200; then
   echo "STAGE s1 ready $(since "$T0") after start ($(grep -m1 'xcfast built in' runner.log))"
   mem "1 simulator"
-  echo "    s1: $(simrss "$MOBAI_SIM_UDID")"
 else
   FAILED=1
 fi
@@ -83,29 +74,25 @@ if [ $FAILED = 0 ]; then
   if wait_ready s2 900; then
     echo "STAGE s2 (slim auto) ready in $(since "$T")"
     mem "2 simulators"
-    echo "    s2: $(simrss "$(curl -s "$API/simulators/s2" | jq -r .udid)")"
   else FAILED=1; fi
+
+  # A source change, then rebuilds with two simulators up: s1 compiles it,
+  # s2 finds nothing new.
+  touch Sources/Views.swift
+  rebuild s1 || FAILED=1
+  mem "after rebuild"
+  rebuild s2 || FAILED=1
 
   T=$(date +%s)
   curl -s -X POST "$API/simulators" -H 'Content-Type: application/json' -d '{"slim":"stock"}' | jq -c .
   if wait_ready s3 900; then
     echo "STAGE s3 (stock) ready in $(since "$T")"
     mem "3 simulators"
-    for id in s1 s2 s3; do
-      echo "    $id: $(simrss "$(curl -s "$API/simulators/$id" | jq -r .udid)")"
-    done
   else FAILED=1; fi
 
+  curl -s "$API/simulators" | jq -c '.simulators[] | {id, state}'
   code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API/simulators" -d '{}')
-  echo "LIMIT a 4th simulator answers $code (409 expected)"
-  [ "$code" = 409 ] || FAILED=1
-
-  # A source change, then rebuilds: s1 compiles it, s2 finds nothing new.
-  touch Sources/Views.swift
-  mem "before rebuild"
-  rebuild s1 || FAILED=1
-  mem "after rebuild"
-  rebuild s2 || FAILED=1
+  echo "LIMIT a 4th simulator answers $code (409 expected while 3 run)"
 
   curl -s "$API/simulators" | jq -c '.simulators[] | {id, state, slim, primary}'
 fi
