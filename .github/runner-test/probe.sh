@@ -128,6 +128,9 @@ if [ "${LAT:-}" = 1 ]; then
     # the simulator's own (under a CoreSimulator runtime) from the Mac's.
     ( sleep 15; ps -Ao pcpu=,rss=,comm= -r | head -8 | sed "s/^/PS $1 swiping /" | tee -a "$LOG" ) &
     node .github/runner-test/latency.mjs "$1" "ws://127.0.0.1:7101/simulators/s1/screen/ws" 20 2>&1 | tee -a "$LOG"; }
+  # Did the runner's quieting hold? Spotlight's agents in this session.
+  launchctl print "gui/$(id -u)" 2>/dev/null | grep -iE "corespotlightd|spotlightknowledged" | sed 's/^/AGENTS /' | tee -a "$LOG"
+  pgrep -lf "corespotlightd|spotlightknowledged" | sed 's/^/AGENTPROC /' | tee -a "$LOG"
   curl -s -X POST "$API/simulators" -H 'Content-Type: application/json' -d '{"screen":"h264"}' >/dev/null
   wait_ready s1 900 && say "s1 ready $(since "$T0") after start"
   sleep 60
