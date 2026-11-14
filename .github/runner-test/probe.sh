@@ -83,6 +83,15 @@ if [ "${PHASES:-0}" = 1 ]; then
   echo "PHASE S: runner starts $(date -u +%H:%M:%S)" | tee -a cpu.log
 fi
 
+# QUIET=1: the Mac's own background work off first (Spotlight indexing,
+# software update checks), as a runner on a throwaway VM could do.
+if [ "${QUIET:-}" = 1 ]; then
+  sudo mdutil -a -i off >/dev/null 2>&1
+  sudo softwareupdate --schedule off >/dev/null 2>&1
+  sudo killall softwareupdated mds_stores >/dev/null 2>&1
+  echo "quiet: Spotlight indexing and software update checks off"
+fi
+
 # --duration is long so no simulator closes for being unused mid-test.
 # Every runner line gets the time, to line it up with the viewer's side.
 ./bin/mobai-ci runner --xcfast "$PWD/bin/xcfast" \
@@ -115,7 +124,9 @@ if [ "${LAT:-}" = 1 ]; then
   LOADS=$!
   top5() { top -l 2 -s 2 -n 8 -o cpu -stats command,cpu,mem | awk '/^PID|^COMMAND/{c++; next} c==2&&NF' | sed "s/^/TOP $1 /" | tee -a "$LOG"; }
   lat() { say "STEP $1 $(date -u +%H:%M:%S)"; top5 "$1"
-    ( sleep 15; top5 "$1 swiping" ) &
+    # During the swipes: the busiest processes with their full paths, to tell
+    # the simulator's own (under a CoreSimulator runtime) from the Mac's.
+    ( sleep 15; ps -Ao pcpu=,rss=,comm= -r | head -8 | sed "s/^/PS $1 swiping /" | tee -a "$LOG" ) &
     node .github/runner-test/latency.mjs "$1" "ws://127.0.0.1:7101/simulators/s1/screen/ws" 20 2>&1 | tee -a "$LOG"; }
   curl -s -X POST "$API/simulators" -H 'Content-Type: application/json' -d '{"screen":"h264"}' >/dev/null
   wait_ready s1 900 && say "s1 ready $(since "$T0") after start"
