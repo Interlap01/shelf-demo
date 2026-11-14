@@ -119,6 +119,30 @@ stop_runner() { curl -s -X POST "$API/stop" | jq -c .; for _ in $(seq 1 60); do 
 for _ in $(seq 1 400); do curl -sf "$API/health" >/dev/null && break; sleep 2; done
 echo "STAGE runner API up $(since "$T0") after start"
 
+# EDGE=1: do swipes up from the bottom through the screen socket go home and
+# to the app switcher? Settings opened before each, a screenshot after, all
+# uploaded as edge.tgz.
+if [ "${EDGE:-}" = 1 ]; then
+  curl -s -X POST "$API/simulators" -H 'Content-Type: application/json' -d '{"screen":"h264"}' >/dev/null
+  wait_ready s1 900 || exit 1
+  UDID=$(xcrun simctl list devices booted -j | jq -r '[.devices[][] | select(.state=="Booted")][0].udid')
+  WS=ws://127.0.0.1:7101/simulators/s1/screen/ws
+  mkdir -p edge
+  sleep 20
+  shot() { xcrun simctl io "$UDID" screenshot "edge/$1.png" >/dev/null 2>&1; echo "EDGE $1"; }
+  try() { # name startY travel hold
+    xcrun simctl launch "$UDID" com.apple.Preferences >/dev/null; sleep 3; shot "$1-before"
+    node .github/runner-test/edge.mjs "$WS" "$2" "$3" "$4"; sleep 2.5; shot "$1-after"
+  }
+  try flick 0.99 150 0
+  try hold 0.99 400 900
+  try content 0.9 150 0
+  tar czf edge.tgz edge
+  gh release upload runner-test edge.tgz --clobber -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 && echo "EDGE uploaded"
+  stop_runner
+  exit 0
+fi
+
 # HOLD=1: one simulator for someone to try in the MobAI app, then whatever
 # the release asset runner-cmd says, checked every 10s: "start <n>" starts
 # another simulator (n only tells one command from the next), "stop" ends.
