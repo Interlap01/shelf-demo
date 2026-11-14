@@ -1,8 +1,9 @@
 name: Runner test
 
-# Tries mobai-ci runner on a GitHub macOS runner: an xcfast build, three
-# simulators on one checkout, a rebuild. The binaries come from the draft
-# release "runner-test".
+# Tries mobai-ci runner on a GitHub macOS runner: an xcfast build, then
+# simulators started through the runner's API on one checkout. The job boots
+# no simulator itself: the runner makes each one on request, slim before its
+# one boot. The binaries come from the draft release "runner-test".
 on:
   push:
     branches: [runner-test]
@@ -11,19 +12,10 @@ jobs:
   runner:
     runs-on: macos-latest
     timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        max_fps: [0, 30]
     permissions:
       contents: write # reads the draft release
     steps:
       - uses: actions/checkout@v7
-
-      - name: Install mobai-ci + boot simulator
-        uses: MobAI-App/mobai-ci@v1
-        with:
-          boot-sim: true
 
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@v1
@@ -34,7 +26,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download runner-test -R "$GITHUB_REPOSITORY" -D bin
+          gh release download runner-test -R "$GITHUB_REPOSITORY" -D bin -p mobai-ci -p xcfast
           chmod +x bin/*
 
       - name: Restore the xcfast cache
@@ -49,10 +41,8 @@ jobs:
           MOBAI_API_KEY: ${{ secrets.MOBAI_API_KEY }}
           GH_TOKEN: ${{ github.token }}
           HOLD: "1"
-          HOLD_MINUTES: "8"
+          HOLD_MINUTES: "30"
           PHASES: "1"
-          MAX_FPS: ${{ matrix.max_fps }}
-          END_HOLD_MINUTES: "5"
         run: bash .github/runner-test/probe.sh
 
       - name: Save the xcfast cache
@@ -60,4 +50,4 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: ~/.xcfast
-          key: xcfast-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.max_fps }}
+          key: xcfast-${{ github.run_id }}-${{ github.run_attempt }}

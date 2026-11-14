@@ -85,16 +85,25 @@ fi
 
 # --duration is long so no simulator closes for being unused mid-test.
 # Every runner line gets the time, to line it up with the viewer's side.
-./bin/mobai-ci runner --xcfast "$PWD/bin/xcfast" --device "$MOBAI_SIM_UDID" --wait-device 4m \
+./bin/mobai-ci runner --xcfast "$PWD/bin/xcfast" \
   --duration 45m --max-duration 50m --max-simulators 3 --max-fps "${MAX_FPS:-30}" \
-  --label "${GITHUB_REPOSITORY} runner test fps${MAX_FPS:-30}" 2>&1 \
+  --label "${GITHUB_REPOSITORY} runner test" 2>&1 \
   | while IFS= read -r l; do echo "$(date -u +%H:%M:%S) $l"; done | tee runner.log | sed 's/^/RUNNER /' &
 PID=$!
 trap 'echo "::group::runner log"; cat runner.log; echo "::endgroup::"; echo "::group::tunnel log"; cat "${TMPDIR:-/tmp}"/mobai-ci-tunnel-*.log; echo "::endgroup::"' EXIT
+stop_runner() { pkill -INT -f "bin/mobai-ci runner" 2>/dev/null; for _ in $(seq 1 60); do pgrep -f "bin/mobai-ci runner" >/dev/null || break; sleep 2; done; }
+
+# The runner builds, then waits: it starts no simulator by itself. Ask for the
+# first one the way any client would.
+for _ in $(seq 1 400); do curl -sf "$API/health" >/dev/null && break; sleep 2; done
+echo "STAGE runner API up $(since "$T0") after start"
+curl -s -X POST "$API/simulators" -H 'Content-Type: application/json' -d '{}' | jq -c .
+sim1() { curl -s "$API/simulators/s1" | jq -r '.udid // empty'; }
 
 # HOLD: only the first simulator, kept up for someone to watch.
 if [ "${HOLD:-}" = 1 ]; then
   wait_ready s1 1200 && echo "STAGE s1 ready $(since "$T0") after start"
+  MOBAI_SIM_UDID=$(sim1)
   HOLD_START=$(date +%s)
   # PHASES: what takes the CPU. Every 5s the load, swap and the top processes;
   # the phases change one thing at a time: a viewer (on the developer's
@@ -158,31 +167,9 @@ EOF
   fi
   sleep $(( ${HOLD_MINUTES:-25} * 60 - ($(date +%s) - HOLD_START) ))
   curl -s -X DELETE "$API/simulators/s1" >/dev/null
-  for _ in $(seq 1 60); do kill -0 "$PID" 2>/dev/null || break; sleep 2; done
-  # OCR_CHECK: text drawn on a canvas is not in the accessibility tree, so
-  # tapping it goes through OCR. Once as this runner (github-hosted: text only,
-  # no icon scan) and once claiming self-hosted (icons scanned on this Mac),
-  # with the CPU each mobai-ci test used.
-  if [ "${OCR_CHECK:-0}" = 1 ]; then
-    echo "RUNNER_ENVIRONMENT=${RUNNER_ENVIRONMENT:-unset}"
-    mkdir -p anim ocrcheck
-    cat > anim/ocr.html <<'EOF'
-<meta name="viewport" content="width=device-width">
-<body style="margin:0"><canvas id="c" width="390" height="700"></canvas>
-<script>const g=document.getElementById('c').getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,390,700);
-g.fillStyle='#000';g.font='bold 40px -apple-system';g.fillText('OCRCHECK',90,300);</script>
-EOF
-    pgrep -f "http.server 8765" >/dev/null || (cd anim && python3 -m http.server 8765 --bind 127.0.0.1 >/dev/null 2>&1 &)
-    printf '# Canvas text, found only through OCR\ntap "OCRCHECK"\n' > ocrcheck/ocr-check.mob
-    for envname in github-hosted self-hosted; do
-      xcrun simctl openurl "$MOBAI_SIM_UDID" http://127.0.0.1:8765/ocr.html
-      sleep 5
-      echo "::group::OCR check as $envname"
-      RUNNER_ENVIRONMENT=$envname /usr/bin/time -l ./bin/mobai-ci test ocrcheck --root . --device "$MOBAI_SIM_UDID" --timeout 4m 2>&1 \
-        | grep -E "pass|fail|PASS|FAIL|OCR|ocr|real|user|sys|maximum resident|error" | head -20
-      echo "::endgroup::"
-    done
-  fi
+  for _ in $(seq 1 60); do [ "$(state s1)" = closed ] && break; sleep 2; done
+  stop_runner
+  echo "simulators left: $(xcrun simctl list devices | grep -c mobai-runner-sim)"
   exit 0
 fi
 
@@ -230,11 +217,13 @@ for id in s3 s2 s1; do
   curl -s -X DELETE "$API/simulators/$id" >/dev/null
 done
 for _ in $(seq 1 90); do
-  kill -0 "$PID" 2>/dev/null || break
+  [ "$(curl -s "$API/simulators" | jq '[.simulators[] | select(.state != "closed" and .state != "failed")] | length')" = 0 ] && break
   sleep 2
 done
+# The runner is a daemon: it stays up without simulators until stopped.
+stop_runner
 if kill -0 "$PID" 2>/dev/null; then
-  echo "!! the runner did not exit after every simulator closed"
+  echo "!! the runner did not exit on SIGINT"
   FAILED=1
   kill "$PID"
 fi
