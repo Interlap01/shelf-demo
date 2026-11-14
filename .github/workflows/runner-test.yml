@@ -19,6 +19,8 @@ jobs:
       matrix:
         stream: [latency]
         quiet: ["0"]
+        bg: ["0", "1"]
+        rep: [1, 2]
     steps:
       - uses: actions/checkout@v7
 
@@ -45,7 +47,7 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: ~/.xcfast
-          key: xcfast-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.stream }}
+          key: xcfast-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.stream }}-${{ matrix.bg }}-${{ matrix.rep }}
           restore-keys: xcfast-
 
       - name: Run and probe
@@ -56,6 +58,7 @@ jobs:
           HOLD_MINUTES: "0"
           CAPTURE_MODES: "half"
           QUIET: ${{ matrix.quiet }}
+          BG: ${{ matrix.bg }}
           MAX_SIMS: "3"
           LABEL: "runner latency"
         run: bash .github/runner-test/probe.sh
@@ -65,4 +68,4 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: ~/.xcfast
-          key: xcfast-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.stream }}
+          key: xcfast-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.stream }}-${{ matrix.bg }}-${{ matrix.rep }}

@@ -123,7 +123,21 @@ if [ "${LAT:-}" = 1 ]; then
   ( while :; do say "LOAD $(date -u +%H:%M:%S) $(sysctl -n vm.loadavg) swap $(sysctl -n vm.swapusage | awk '{print $6}')"; sleep 5; done ) &
   LOADS=$!
   top5() { top -l 2 -s 2 -n 8 -o cpu -stats command,cpu,mem | awk '/^PID|^COMMAND/{c++; next} c==2&&NF' | sed "s/^/TOP $1 /" | tee -a "$LOG"; }
-  lat() { say "STEP $1 $(date -u +%H:%M:%S)"; top5 "$1"
+  # BG=1: every process but the simulators, mobai-ci, the job and this probe
+  # into the background band (PRIO_DARWIN_BG: spare CPU only, slow disk), as
+  # the runner could do on a throwaway VM. Again before each round, for the
+  # ones launchd started since.
+  demote() {
+    local keep='CoreSimulator|/Simulator|mobai-ci|xcfast|VTEncoder|VTDecoder|VideoToolbox|WindowServer|Runner\.|kernel_task|^/sbin/launchd$|(^|/)(node|bash|sh|zsh|sudo|ps|sed|tee|grep|awk|top|curl|gh|jq|tar|sleep|taskpolicy)$'
+    local n=0 failed=0
+    while read -r pid comm; do
+      [ "$pid" = $$ ] && continue
+      echo "$comm" | grep -qE "$keep" && continue
+      if sudo -n taskpolicy -b -p "$pid" 2>/dev/null; then n=$((n+1)); else failed=$((failed+1)); fi
+    done < <(ps -Ao pid=,comm=)
+    say "DEMOTED $1: $n processes to the background band, $failed refused"
+  }
+  lat() { say "STEP $1 $(date -u +%H:%M:%S)"; [ "${BG:-}" = 1 ] && demote "$1"; top5 "$1"
     # During the swipes: the busiest processes with their full paths, to tell
     # the simulator's own (under a CoreSimulator runtime) from the Mac's.
     ( sleep 15; ps -Ao pcpu=,rss=,comm= -r | head -8 | sed "s/^/PS $1 swiping /" | tee -a "$LOG" ) &
