@@ -171,7 +171,8 @@ if [ "${LAT:-}" = 1 ]; then
     done < <(ps -Ao pid=,comm=)
     say "DEMOTED $1: $n processes to the background band, $failed refused"
   }
-  lat() { say "STEP $1 $(date -u +%H:%M:%S)"; [ "${BG:-}" = 1 ] && demote "$1"; top5 "$1"
+  lat() { say "STEP $1 $(date -u +%H:%M:%S)"; [ "${BG:-}" = 1 ] && demote "$1"
+    say "PRI4 $1: $(ps -Ao pri= | awk '$1==4' | wc -l | tr -d ' ') processes at priority 4 (the background band)"; top5 "$1"
     # During the swipes: the busiest processes with their full paths, to tell
     # the simulator's own (under a CoreSimulator runtime) from the Mac's.
     ( sleep 15; ps -Ao pcpu=,rss=,comm= -r | head -8 | sed "s/^/PS $1 swiping /" | tee -a "$LOG" ) &
