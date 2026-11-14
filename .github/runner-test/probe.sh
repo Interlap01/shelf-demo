@@ -49,6 +49,13 @@ rebuild() { # id
   echo "!! REBUILD $1 did not finish"; return 1
 }
 
+# ENCPROBE=1: only whether this Mac's H.264 encoder works on frames in
+# parallel (bin/encprobe: no simulator, no runner).
+if [ "${ENCPROBE:-}" = 1 ]; then
+  for i in 1 2 3; do ./bin/encprobe; done
+  exit 0
+fi
+
 echo "machine: $(sysctl -n hw.ncpu) cores ($(sysctl -n hw.perflevel0.logicalcpu 2>/dev/null) performance), $(( $(sysctl -n hw.memsize) / 1073741824 )) GB"
 echo "xcfast cache before: $(du -sh ~/.xcfast 2>/dev/null | cut -f1 || echo none)"
 mem "before"
