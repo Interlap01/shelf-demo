@@ -34,9 +34,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # mobai-ci-exp: a test build whose capture mode a file picks.
-          gh release download runner-test -R "$GITHUB_REPOSITORY" -D bin -p mobai-ci-exp -p xcfast
-          mv bin/mobai-ci-exp bin/mobai-ci
+          # mobai-ci-exp2: a test build whose capture mode a file picks, with
+          # a strict frame cap timer and a user-interactive capture queue.
+          gh release download runner-test -R "$GITHUB_REPOSITORY" -D bin -p mobai-ci-exp2 -p xcfast
+          mv bin/mobai-ci-exp2 bin/mobai-ci
           chmod +x bin/*
 
       - name: Restore the xcfast cache
@@ -52,7 +53,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           LAT: "1"
           HOLD_MINUTES: "0"
-          CAPTURE_MODES: "half full software half-nocap"
+          CAPTURE_MODES: "half half-nocap"
           MAX_SIMS: "3"
           LABEL: "runner latency"
         run: bash .github/runner-test/probe.sh
