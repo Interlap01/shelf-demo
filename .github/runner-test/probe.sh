@@ -86,7 +86,7 @@ fi
 # --duration is long so no simulator closes for being unused mid-test.
 # Every runner line gets the time, to line it up with the viewer's side.
 ./bin/mobai-ci runner --xcfast "$PWD/bin/xcfast" \
-  --duration 45m --max-duration 50m --max-simulators "${MAX_SIMS:-3}" --max-fps "${MAX_FPS:-30}" --screen "${STREAM:-h264}" \
+  --duration 45m --max-duration 50m --max-simulators "${MAX_SIMS:-3}" --max-fps "${MAX_FPS:-30}" \
   --label "${GITHUB_REPOSITORY} runner test" 2>&1 \
   | while IFS= read -r l; do echo "$(date -u +%H:%M:%S) $l"; done | tee runner.log | sed 's/^/RUNNER /' &
 PID=$!
@@ -100,8 +100,8 @@ echo "STAGE runner API up $(since "$T0") after start"
 
 # STREAM=mjpeg|h264: how many simulators this machine can show at once. One
 # simulator more at each level, each with a viewer on this machine through the
-# runner's screen route (--screen mjpeg: the on-device runner's frames, h264:
-# the runner's encoder). Every level is measured with the screens still, then
+# runner's screen route (each started with "screen": "mjpeg", the on-device
+# runner's frames, or "h264", the runner's encoder). Every level is measured with the screens still, then
 # switching between light and dark every second on all of them.
 # The log goes to the draft release every 15s, since a machine that hangs
 # never hands its job log back.
@@ -125,7 +125,7 @@ if [ -n "${STREAM:-}" ]; then
   for k in $(seq 1 "${MAX_SIMS:-5}"); do
     say "LEVEL $k: starting simulator s$k $(date -u +%H:%M:%S)"
     T=$(date +%s)
-    curl -s -X POST "$API/simulators" -H 'Content-Type: application/json' -d '{}' >/dev/null
+    curl -s -X POST "$API/simulators" -H 'Content-Type: application/json' -d "{\"screen\":\"$STREAM\"}" | jq -c . | tee -a "$LOG"
     wait_ready "s$k" 900 || { say "LEVEL $k: s$k did not start, stopping here"; break; }
     u=$(curl -s "$API/simulators/s$k" | jq -r .udid)
     udids+=("$u")
