@@ -130,7 +130,9 @@ if [ "${LAT:-}" = 1 ]; then
     node .github/runner-test/latency.mjs "$1" "ws://127.0.0.1:7101/simulators/s1/screen/ws" 20 2>&1 | tee -a "$LOG"; }
   # Did the runner's quieting hold? Spotlight's agents in this session.
   launchctl print "gui/$(id -u)" 2>/dev/null | grep -iE "corespotlightd|spotlightknowledged" | sed 's/^/AGENTS /' | tee -a "$LOG"
-  pgrep -lf "corespotlightd|spotlightknowledged" | sed 's/^/AGENTPROC /' | tee -a "$LOG"
+  pgrep -lf "corespotlightd|spotlightknowledged|softwareupdated" | sed 's/^/AGENTPROC /' | tee -a "$LOG"
+  sudo -n launchctl print system/com.apple.softwareupdated 2>&1 | head -3 | sed 's/^/UPDATED /' | tee -a "$LOG"
+  csrutil status 2>&1 | sed 's/^/SIP /' | tee -a "$LOG"
   curl -s -X POST "$API/simulators" -H 'Content-Type: application/json' -d '{"screen":"h264"}' >/dev/null
   wait_ready s1 900 && say "s1 ready $(since "$T0") after start"
   sleep 60
