@@ -11,7 +11,7 @@ on:
 jobs:
   runner:
     runs-on: macos-latest
-    timeout-minutes: 50
+    timeout-minutes: 60
     permissions:
       contents: write # reads the draft release
     strategy:
@@ -20,7 +20,7 @@ jobs:
         stream: [latency]
         quiet: ["0"]
         bg: ["0"]
-        rep: [1, 2]
+        rep: [1]
     steps:
       - uses: actions/checkout@v7
 
@@ -37,10 +37,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # mobai-ci-frames: main plus frame accounting, and a frame cap and
-          # size per capture from /tmp/mobai-simshare-mode.
-          gh release download runner-test -R "$GITHUB_REPOSITORY" -D bin -p mobai-ci-frames -p xcfast -p encprobe
-          mv bin/mobai-ci-frames bin/mobai-ci
+          # mobai-ci-fix: main, with every runner optimization.
+          gh release download runner-test -R "$GITHUB_REPOSITORY" -D bin -p mobai-ci-fix -p xcfast
+          mv bin/mobai-ci-fix bin/mobai-ci
           chmod +x bin/*
 
       - name: Restore the xcfast cache
@@ -54,16 +53,11 @@ jobs:
         env:
           MOBAI_API_KEY: ${{ secrets.MOBAI_API_KEY }}
           GH_TOKEN: ${{ github.token }}
-          LAT: "1"
-          HOLD_MINUTES: "0"
-          CAPTURE_MODES: "cap30 cap60 nocap full30"
+          HOLD: "1"
+          HOLD_MINUTES: "45"
           QUIET: ${{ matrix.quiet }}
-          BG: ${{ matrix.bg }}
-          BAND: "0"
-          PAIRED: "0"
-          ENCPROBE: "1"
           MAX_SIMS: "3"
-          LABEL: "runner latency"
+          LABEL: "runner test"
         run: bash .github/runner-test/probe.sh
 
       - name: Save the xcfast cache

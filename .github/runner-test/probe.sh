@@ -106,7 +106,7 @@ fi
 # --duration is long so no simulator closes for being unused mid-test.
 # Every runner line gets the time, to line it up with the viewer's side.
 ./bin/mobai-ci runner --xcfast "$PWD/bin/xcfast" \
-  --duration 45m --max-duration 50m --max-simulators "${MAX_SIMS:-3}" --max-fps "${MAX_FPS:-30}" \
+  --duration 45m --max-duration 50m --max-simulators "${MAX_SIMS:-3}" ${MAX_FPS:+--max-fps "$MAX_FPS"} \
   --device-type "${DEVICE_TYPE:-iPhone 16 Pro}" \
   --label "${GITHUB_REPOSITORY} ${LABEL:-runner test}" 2>&1 \
   | while IFS= read -r l; do echo "$(date -u +%H:%M:%S) $l"; done | tee runner.log | sed 's/^/RUNNER /' &
@@ -118,6 +118,30 @@ stop_runner() { curl -s -X POST "$API/stop" | jq -c .; for _ in $(seq 1 60); do 
 # first one the way any client would.
 for _ in $(seq 1 400); do curl -sf "$API/health" >/dev/null && break; sleep 2; done
 echo "STAGE runner API up $(since "$T0") after start"
+
+# HOLD=1: one simulator for someone to try in the MobAI app, then whatever
+# the release asset runner-cmd says, checked every 10s: "start <n>" starts
+# another simulator (n only tells one command from the next), "stop" ends.
+if [ "${HOLD:-}" = 1 ]; then
+  curl -s -X POST "$API/simulators" -H 'Content-Type: application/json' -d '{"screen":"h264"}' | jq -c .
+  wait_ready s1 900 && echo "HOLD s1 ready $(since "$T0") after start"
+  seen=""
+  end=$(( $(date +%s) + ${HOLD_MINUTES:-45} * 60 ))
+  while [ "$(date +%s)" -lt "$end" ] && kill -0 "$PID" 2>/dev/null; do
+    sleep 10
+    cmd=$(gh release download runner-test -R "$GITHUB_REPOSITORY" -p runner-cmd -O - 2>/dev/null | head -1)
+    [ -z "$cmd" ] || [ "$cmd" = "$seen" ] && continue
+    seen=$cmd
+    echo "HOLD command: $cmd"
+    case "$cmd" in
+      start*) curl -s -X POST "$API/simulators" -H 'Content-Type: application/json' -d '{"screen":"h264"}' | jq -c . ;;
+      stop*) break ;;
+    esac
+    curl -s "$API/simulators" | jq -c '[.simulators[] | {id, state}]'
+  done
+  stop_runner
+  exit 0
+fi
 
 # BAND=1: do rebuilds get slower with the Mac's services in the background
 # band? On one machine, so its luck counts for both: a warm-up rebuild, then
