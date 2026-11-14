@@ -87,6 +87,7 @@ fi
 # Every runner line gets the time, to line it up with the viewer's side.
 ./bin/mobai-ci runner --xcfast "$PWD/bin/xcfast" \
   --duration 45m --max-duration 50m --max-simulators "${MAX_SIMS:-3}" --max-fps "${MAX_FPS:-30}" \
+  --device-type "${DEVICE_TYPE:-iPhone 16 Pro}" \
   --label "${GITHUB_REPOSITORY} ${LABEL:-runner test}" 2>&1 \
   | while IFS= read -r l; do echo "$(date -u +%H:%M:%S) $l"; done | tee runner.log | sed 's/^/RUNNER /' &
 PID=$!
@@ -114,6 +115,7 @@ if [ "${LAT:-}" = 1 ]; then
   LOADS=$!
   top5() { top -l 2 -s 2 -n 8 -o cpu -stats command,cpu,mem | awk '/^PID|^COMMAND/{c++; next} c==2&&NF' | sed "s/^/TOP $1 /" | tee -a "$LOG"; }
   lat() { say "STEP $1 $(date -u +%H:%M:%S)"; top5 "$1"
+    ( sleep 15; top5 "$1 swiping" ) &
     node .github/runner-test/latency.mjs "$1" "ws://127.0.0.1:7101/simulators/s1/screen/ws" 20 2>&1 | tee -a "$LOG"; }
   curl -s -X POST "$API/simulators" -H 'Content-Type: application/json' -d '{"screen":"h264"}' >/dev/null
   wait_ready s1 900 && say "s1 ready $(since "$T0") after start"

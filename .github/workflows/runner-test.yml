@@ -18,6 +18,7 @@ jobs:
       fail-fast: false
       matrix:
         stream: [latency]
+        device: ["iPhone 16 Pro", "iPhone SE (3rd generation)"]
     steps:
       - uses: actions/checkout@v7
 
@@ -53,7 +54,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           LAT: "1"
           HOLD_MINUTES: "0"
-          CAPTURE_MODES: "half half-nocap"
+          CAPTURE_MODES: "half 1fps"
+          DEVICE_TYPE: ${{ matrix.device }}
           MAX_SIMS: "3"
           LABEL: "runner latency"
         run: bash .github/runner-test/probe.sh
