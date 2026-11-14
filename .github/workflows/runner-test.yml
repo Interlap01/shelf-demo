@@ -10,8 +10,9 @@ on:
 
 jobs:
   runner:
-    runs-on: macos-latest
-    timeout-minutes: 60
+    # The paid M2 machine with GPU acceleration, once.
+    runs-on: macos-latest-xlarge
+    timeout-minutes: 40
     permissions:
       contents: write # reads the draft release
     strategy:
@@ -20,7 +21,7 @@ jobs:
         stream: [latency]
         quiet: ["0"]
         bg: ["0"]
-        rep: [1, 2, 3, 4, 5, 6]
+        rep: [1]
     steps:
       - uses: actions/checkout@v7
 
