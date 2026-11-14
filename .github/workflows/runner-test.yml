@@ -18,7 +18,7 @@ jobs:
       fail-fast: false
       matrix:
         stream: [latency]
-        quiet: ["0", "1"]
+        quiet: ["0"]
     steps:
       - uses: actions/checkout@v7
 
@@ -35,10 +35,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # mobai-ci-exp3: a test build whose capture mode a file picks, and
-          # which logs each step from a touch to the published frame (LATB).
-          gh release download runner-test -R "$GITHUB_REPOSITORY" -D bin -p mobai-ci-exp3 -p xcfast
-          mv bin/mobai-ci-exp3 bin/mobai-ci
+          # mobai-ci-fix: the strict frame cap timer, and the runner quieting
+          # a GitHub-hosted Mac by itself.
+          gh release download runner-test -R "$GITHUB_REPOSITORY" -D bin -p mobai-ci-fix -p xcfast
+          mv bin/mobai-ci-fix bin/mobai-ci
           chmod +x bin/*
 
       - name: Restore the xcfast cache
