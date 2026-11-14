@@ -97,6 +97,31 @@ stop_runner() { curl -s -X POST "$API/stop" | jq -c .; for _ in $(seq 1 60); do 
 # first one the way any client would.
 for _ in $(seq 1 400); do curl -sf "$API/health" >/dev/null && break; sleep 2; done
 echo "STAGE runner API up $(since "$T0") after start"
+
+# DRIVE: how fast the app's screens go when a test drives the simulator and
+# nobody watches (no video at all). The runner only builds here; the simulator
+# is booted slim the same way (everything off before its first boot) and a
+# test walks every screen three times, each step timed.
+if [ "${DRIVE:-}" = 1 ]; then
+  APP=$(ls -d ~/.xcfast/*/dd/Build/Products/Debug-iphonesimulator/*.app | head -1)
+  echo '{}' > slim.json
+  T=$(date +%s)
+  UDID=$(./bin/mobai-ci sim boot --slim slim.json --name drive-sim | tail -1)
+  echo "STAGE slim simulator booted in $(since "$T")"
+  ( while :; do echo "LOAD $(date -u +%H:%M:%S) $(sysctl -n vm.loadavg)"; sleep 5; done ) &
+  LOADS=$!
+  for i in 1 2 3; do
+    echo "DRIVE run $i $(date -u +%H:%M:%S)"
+    if [ "$i" = 1 ]; then set -- --app "$APP"; else set --; fi
+    ./bin/mobai-ci test .github/runner-test/drive.mob --device "$UDID" "$@" \
+      --progress --timeout 10m --output "drive-$i" 2>&1 | sed "s/^/DRIVE$i /"
+    [ "${PIPESTATUS[0]}" = 0 ] || FAILED=1
+  done
+  kill "$LOADS"
+  xcrun simctl delete "$UDID"
+  stop_runner
+  exit "$FAILED"
+fi
 curl -s -X POST "$API/simulators" -H 'Content-Type: application/json' -d '{}' | jq -c .
 sim1() { curl -s "$API/simulators/s1" | jq -r '.udid // empty'; }
 

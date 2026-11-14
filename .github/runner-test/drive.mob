@@ -1,0 +1,21 @@
+# What an agent does on the runner's simulator: every screen of Shelf once.
+app "run.mobai.shelf" fresh
+tap "Sign in"
+wait_for "Email"
+type "Email" → "alice@example.com"
+type "Password" → "hunter22"
+tap "Get started"
+wait_for "Welcome, Alice"
+swipe up
+swipe down
+tap "Add Ceramic mug to cart"
+wait_for "1 item in your cart"
+tap "Add Desk plant to cart"
+wait_for "2 items in your cart"
+tap "Cart" type:button
+wait_for "Total"
+assert_exists "$34.00"
+tap "Checkout"
+wait_for "Order placed"
+tap "Shop" type:button
+wait_for "Welcome, Alice"
