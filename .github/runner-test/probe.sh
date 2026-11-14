@@ -91,7 +91,7 @@ fi
   | while IFS= read -r l; do echo "$(date -u +%H:%M:%S) $l"; done | tee runner.log | sed 's/^/RUNNER /' &
 PID=$!
 trap 'echo "::group::runner log"; cat runner.log; echo "::endgroup::"; echo "::group::tunnel log"; cat "${TMPDIR:-/tmp}"/mobai-ci-tunnel-*.log; echo "::endgroup::"' EXIT
-stop_runner() { pkill -INT -f "bin/mobai-ci runner" 2>/dev/null; for _ in $(seq 1 60); do pgrep -f "bin/mobai-ci runner" >/dev/null || break; sleep 2; done; }
+stop_runner() { curl -s -X POST "$API/stop" | jq -c .; for _ in $(seq 1 60); do pgrep -f "bin/mobai-ci runner" >/dev/null || break; sleep 2; done; }
 
 # The runner builds, then waits: it starts no simulator by itself. Ask for the
 # first one the way any client would.
