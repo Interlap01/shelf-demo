@@ -20,7 +20,7 @@ jobs:
         stream: [latency]
         quiet: ["0"]
         bg: ["0"]
-        rep: [1, 2]
+        rep: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@v7
 
@@ -60,6 +60,7 @@ jobs:
           QUIET: ${{ matrix.quiet }}
           BG: ${{ matrix.bg }}
           BAND: "0"
+          PAIRED: "1"
           MAX_SIMS: "3"
           LABEL: "runner latency"
         run: bash .github/runner-test/probe.sh

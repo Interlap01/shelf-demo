@@ -92,6 +92,10 @@ if [ "${QUIET:-}" = 1 ]; then
   echo "quiet: Spotlight indexing and software update checks off"
 fi
 
+# PAIRED=1: the processes already at priority 4 (the background band's)
+# before the runner starts, so the ones it moves can be told apart.
+[ "${PAIRED:-}" = 1 ] && ps -Ao pid=,pri= | awk '$2==4{print $1}' | sort > base4.pids
+
 # --duration is long so no simulator closes for being unused mid-test.
 # Every runner line gets the time, to line it up with the viewer's side.
 ./bin/mobai-ci runner --xcfast "$PWD/bin/xcfast" \
@@ -187,7 +191,26 @@ if [ "${LAT:-}" = 1 ]; then
   sleep 60
   # CAPTURE_MODES (test build only): each new capture reads its mode from
   # /tmp/mobai-simshare-mode, and every latency run opens a new one.
-  for round in 1 2; do
+  # PAIRED=1: four rounds on one machine with the runner's band on, off, off,
+  # on, so the machine's luck counts for both. Off: everything the runner put
+  # in the band since it started, moved back. On again: the same ones back in.
+  rounds="1 2"
+  [ "${PAIRED:-}" = 1 ] && rounds="1:on 2:off 3:off 4:on"
+  band_set() {
+    local t
+    if [ "$1" = off ]; then
+      ps -Ao pid=,pri= | awk '$2==4{print $1}' | sort | comm -23 - base4.pids > lift.pids
+      sudo -n bash -c 'for p in $(cat lift.pids); do taskpolicy -B -p "$p" 2>/dev/null; done'
+      cat lift.pids >> lifted.pids
+      say "BAND off: $(wc -l < lift.pids | tr -d ' ') moved back"
+    elif [ -s lifted.pids ]; then
+      sudo -n bash -c 'for p in $(cat lifted.pids); do taskpolicy -b -p "$p" 2>/dev/null; done'
+      say "BAND on: $(wc -l < lifted.pids | tr -d ' ') moved in again"
+      : > lifted.pids
+    fi
+  }
+  for round in $rounds; do
+    case "$round" in *:*) band_set "${round#*:}" ;; esac
     for mode in ${CAPTURE_MODES:-half}; do
       echo "$mode" > /tmp/mobai-simshare-mode
       lat "$mode ($round)"
