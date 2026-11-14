@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        stream: [view]
+        stream: [latency]
     steps:
       - uses: actions/checkout@v7
 
@@ -48,9 +48,10 @@ jobs:
         env:
           MOBAI_API_KEY: ${{ secrets.MOBAI_API_KEY }}
           GH_TOKEN: ${{ github.token }}
-          VIEW: "h264 mjpeg h264"
-          HOLD_MINUTES: "25"
+          LAT: "1"
+          HOLD_MINUTES: "15"
           MAX_SIMS: "3"
+          LABEL: "runner latency"
         run: bash .github/runner-test/probe.sh
 
       - name: Save the xcfast cache

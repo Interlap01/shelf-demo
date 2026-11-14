@@ -87,7 +87,7 @@ fi
 # Every runner line gets the time, to line it up with the viewer's side.
 ./bin/mobai-ci runner --xcfast "$PWD/bin/xcfast" \
   --duration 45m --max-duration 50m --max-simulators "${MAX_SIMS:-3}" --max-fps "${MAX_FPS:-30}" \
-  --label "${GITHUB_REPOSITORY} runner test" 2>&1 \
+  --label "${GITHUB_REPOSITORY} ${LABEL:-runner test}" 2>&1 \
   | while IFS= read -r l; do echo "$(date -u +%H:%M:%S) $l"; done | tee runner.log | sed 's/^/RUNNER /' &
 PID=$!
 trap 'echo "::group::runner log"; cat runner.log; echo "::endgroup::"; echo "::group::tunnel log"; cat "${TMPDIR:-/tmp}"/mobai-ci-tunnel-*.log; echo "::endgroup::"' EXIT
@@ -97,6 +97,46 @@ stop_runner() { curl -s -X POST "$API/stop" | jq -c .; for _ in $(seq 1 60); do 
 # first one the way any client would.
 for _ in $(seq 1 400); do curl -sf "$API/health" >/dev/null && break; sleep 2; done
 echo "STAGE runner API up $(since "$T0") after start"
+
+# LAT=1: how fast the screen answers a finger (latency.mjs on this machine,
+# through s1's H.264 socket), step by step: as it is, with the Mac's Spotlight
+# indexing off, with two more idle simulators. Then held HOLD_MINUTES so it
+# can be measured through the tunnel too. Logs go to the release every 15s.
+if [ "${LAT:-}" = 1 ]; then
+  LOG=latency.log
+  : > "$LOG"
+  say() { echo "$*" | tee -a "$LOG"; }
+  ( while :; do sleep 15; cp runner.log runner-latency.log 2>/dev/null
+      tar czf latency.tgz "$LOG" runner-latency.log 2>/dev/null
+      gh release upload runner-test latency.tgz --clobber -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; done ) &
+  UPLOADER=$!
+  ( while :; do say "LOAD $(date -u +%H:%M:%S) $(sysctl -n vm.loadavg) swap $(sysctl -n vm.swapusage | awk '{print $6}')"; sleep 5; done ) &
+  LOADS=$!
+  top5() { top -l 2 -s 2 -n 8 -o cpu -stats command,cpu,mem | awk '/^PID|^COMMAND/{c++; next} c==2&&NF' | sed "s/^/TOP $1 /" | tee -a "$LOG"; }
+  lat() { say "STEP $1 $(date -u +%H:%M:%S)"; top5 "$1"
+    node .github/runner-test/latency.mjs "$1" "ws://127.0.0.1:7101/simulators/s1/screen/ws" 20 2>&1 | tee -a "$LOG"; }
+  curl -s -X POST "$API/simulators" -H 'Content-Type: application/json' -d '{"screen":"h264"}' >/dev/null
+  wait_ready s1 900 && say "s1 ready $(since "$T0") after start"
+  sleep 60
+  lat "1 sim"
+  sudo mdutil -a -i off 2>&1 | tee -a "$LOG"
+  sleep 30
+  lat "1 sim, Spotlight indexing off"
+  for k in 2 3; do
+    curl -s -X POST "$API/simulators" -H 'Content-Type: application/json' -d '{"screen":"h264"}' >/dev/null
+    wait_ready "s$k" 900 && say "s$k ready"
+  done
+  sleep 60
+  lat "3 sims (2 idle)"
+  say "HOLD $(date -u +%H:%M:%S)"
+  sleep $(( ${HOLD_MINUTES:-15} * 60 ))
+  kill "$LOADS"
+  stop_runner
+  kill "$UPLOADER"
+  tar czf latency.tgz "$LOG" runner.log
+  gh release upload runner-test latency.tgz --clobber -R "$GITHUB_REPOSITORY" >/dev/null 2>&1
+  exit 0
+fi
 
 # VIEW="h264 mjpeg h264": one simulator per word, each started with that
 # screen, kept up HOLD_MINUTES for the MobAI app to show, then the runner is
