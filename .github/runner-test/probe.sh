@@ -86,7 +86,7 @@ fi
 # --duration is long so no simulator closes for being unused mid-test.
 # Every runner line gets the time, to line it up with the viewer's side.
 ./bin/mobai-ci runner --xcfast "$PWD/bin/xcfast" \
-  --duration 45m --max-duration 50m --max-simulators 3 --max-fps "${MAX_FPS:-30}" \
+  --duration 45m --max-duration 50m --max-simulators "${MAX_SIMS:-3}" --max-fps "${MAX_FPS:-30}" \
   --label "${GITHUB_REPOSITORY} runner test" 2>&1 \
   | while IFS= read -r l; do echo "$(date -u +%H:%M:%S) $l"; done | tee runner.log | sed 's/^/RUNNER /' &
 PID=$!
@@ -97,6 +97,79 @@ stop_runner() { curl -s -X POST "$API/stop" | jq -c .; for _ in $(seq 1 60); do 
 # first one the way any client would.
 for _ in $(seq 1 400); do curl -sf "$API/health" >/dev/null && break; sleep 2; done
 echo "STAGE runner API up $(since "$T0") after start"
+
+# STREAM=mjpeg|h264: how many simulators this machine can show at once. One
+# simulator more at each level, each with a viewer on this machine (MJPEG from
+# its on-device runner, or the runner's H.264). Every level is measured with
+# the screens still, then with a page that redraws every frame on all of them.
+# The log goes to the draft release every 15s, since a machine that hangs
+# never hands its job log back.
+if [ -n "${STREAM:-}" ]; then
+  LOG="stream-$STREAM.log"
+  : > "$LOG"
+  say() { echo "$*" | tee -a "$LOG"; }
+  ( while :; do sleep 15; cp runner.log "runner-$STREAM.log" 2>/dev/null
+      tar czf "stream-$STREAM.tgz" "$LOG" "runner-$STREAM.log" 2>/dev/null
+      gh release upload runner-test "stream-$STREAM.tgz" --clobber -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; done ) &
+  UPLOADER=$!
+  ( while :; do say "LOAD $(date -u +%H:%M:%S) $(sysctl -n vm.loadavg) swap $(sysctl -n vm.swapusage | awk '{print $6}')"; sleep 5; done ) &
+  LOADS=$!
+  mkdir -p anim
+  cat > anim/index.html <<'EOF'
+<meta name="viewport" content="width=device-width">
+<style>body{margin:0;font:700 64px -apple-system;display:grid;place-items:center;height:100vh}
+#b{width:160px;height:160px;background:#e33;animation:s 1s linear infinite}
+@keyframes s{to{transform:rotate(360deg)}}</style>
+<div><div id="b"></div><p id="n">0</p></div>
+<script>let i=0;(function f(){document.getElementById('n').textContent=++i;requestAnimationFrame(f)})()</script>
+EOF
+  (cd anim && python3 -m http.server 8765 --bind 127.0.0.1 >/dev/null 2>&1 &)
+  # The port the simulator's on-device runner serves MJPEG on: a listening
+  # port of a process inside that simulator that answers multipart.
+  mjpeg_port() {
+    lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | awk 'NR>1{print $2, $9}' | sort -u | while read -r pid addr; do
+      ps -o args= -p "$pid" 2>/dev/null | grep -q "$1" || continue
+      p=${addr##*:}
+      curl -s -m 1 -D - -o /dev/null "http://127.0.0.1:$p/?fps=30" 2>/dev/null | grep -qi multipart && { echo "$p"; return; }
+    done
+  }
+  udids=()
+  for k in $(seq 1 "${MAX_SIMS:-5}"); do
+    say "LEVEL $k: starting simulator s$k $(date -u +%H:%M:%S)"
+    T=$(date +%s)
+    curl -s -X POST "$API/simulators" -H 'Content-Type: application/json' -d '{}' >/dev/null
+    wait_ready "s$k" 900 || { say "LEVEL $k: s$k did not start, stopping here"; break; }
+    u=$(curl -s "$API/simulators/s$k" | jq -r .udid)
+    udids+=("$u")
+    say "LEVEL $k: s$k ready in $(since "$T")"
+    mem "with $k simulators" | tee -a "$LOG"
+    if [ "$STREAM" = mjpeg ]; then
+      p=$(mjpeg_port "$u")
+      [ -n "$p" ] || { say "LEVEL $k: no MJPEG port found for s$k"; break; }
+      node .github/runner-test/watch.mjs mjpeg "s$k" "http://127.0.0.1:$p/?fps=30&scale=50&quality=50" | tee -a "$LOG" &
+    else
+      node .github/runner-test/watch.mjs h264 "s$k" "ws://127.0.0.1:7101/simulators/s$k/screen/ws" | tee -a "$LOG" &
+    fi
+    sleep 10
+    say "LEVEL $k still $(date -u +%H:%M:%S)"
+    sleep 30
+    top -l 2 -s 2 -n 10 -o cpu -stats command,cpu,mem | awk '/^PID|^COMMAND/{c++; next} c==2&&NF' | sed "s/^/TOP $k still /" | tee -a "$LOG"
+    say "LEVEL $k moving $(date -u +%H:%M:%S)"
+    for u2 in "${udids[@]}"; do xcrun simctl openurl "$u2" http://127.0.0.1:8765/ & done
+    sleep 40
+    top -l 2 -s 2 -n 10 -o cpu -stats command,cpu,mem | awk '/^PID|^COMMAND/{c++; next} c==2&&NF' | sed "s/^/TOP $k moving /" | tee -a "$LOG"
+    for u2 in "${udids[@]}"; do xcrun simctl terminate "$u2" com.apple.mobilesafari & done
+    say "LEVEL $k done $(date -u +%H:%M:%S)"
+  done
+  pkill -f watch.mjs
+  kill "$LOADS"
+  stop_runner
+  sleep 2
+  kill "$UPLOADER"
+  tar czf "stream-$STREAM.tgz" "$LOG" runner.log
+  gh release upload runner-test "stream-$STREAM.tgz" --clobber -R "$GITHUB_REPOSITORY" >/dev/null 2>&1
+  exit 0
+fi
 
 # DRIVE: how fast the app's screens go when a test drives the simulator and
 # nobody watches (no video at all). The runner only builds here; the simulator

@@ -14,8 +14,16 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: write # reads the draft release
+    strategy:
+      fail-fast: false
+      matrix:
+        stream: [mjpeg, h264]
     steps:
       - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
 
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@v1
@@ -33,16 +41,15 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: ~/.xcfast
-          key: xcfast-${{ github.run_id }}-${{ github.run_attempt }}
+          key: xcfast-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.stream }}
           restore-keys: xcfast-
 
       - name: Run and probe
         env:
           MOBAI_API_KEY: ${{ secrets.MOBAI_API_KEY }}
           GH_TOKEN: ${{ github.token }}
-          DRIVE: "1"
-          HOLD_MINUTES: "30"
-          PHASES: "0"
+          STREAM: ${{ matrix.stream }}
+          MAX_SIMS: "5"
         run: bash .github/runner-test/probe.sh
 
       - name: Save the xcfast cache
@@ -50,4 +57,4 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: ~/.xcfast
-          key: xcfast-${{ github.run_id }}-${{ github.run_attempt }}
+          key: xcfast-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.stream }}
