@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        stream: [mjpeg, h264]
+        stream: [view]
     steps:
       - uses: actions/checkout@v7
 
@@ -48,8 +48,9 @@ jobs:
         env:
           MOBAI_API_KEY: ${{ secrets.MOBAI_API_KEY }}
           GH_TOKEN: ${{ github.token }}
-          STREAM: ${{ matrix.stream }}
-          MAX_SIMS: "5"
+          VIEW: "h264 mjpeg h264"
+          HOLD_MINUTES: "25"
+          MAX_SIMS: "3"
         run: bash .github/runner-test/probe.sh
 
       - name: Save the xcfast cache

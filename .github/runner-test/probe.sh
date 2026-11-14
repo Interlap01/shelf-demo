@@ -98,6 +98,22 @@ stop_runner() { curl -s -X POST "$API/stop" | jq -c .; for _ in $(seq 1 60); do 
 for _ in $(seq 1 400); do curl -sf "$API/health" >/dev/null && break; sleep 2; done
 echo "STAGE runner API up $(since "$T0") after start"
 
+# VIEW="h264 mjpeg h264": one simulator per word, each started with that
+# screen, kept up HOLD_MINUTES for the MobAI app to show, then the runner is
+# stopped.
+if [ -n "${VIEW:-}" ]; then
+  k=0
+  for mode in $VIEW; do
+    k=$((k + 1))
+    curl -s -X POST "$API/simulators" -H 'Content-Type: application/json' -d "{\"screen\":\"$mode\"}" | jq -c .
+    wait_ready "s$k" 900 && echo "STAGE s$k ($mode) ready $(since "$T0") after start"
+  done
+  curl -s "$API/simulators" | jq -c '.simulators[] | {id, screen, state}'
+  sleep $(( ${HOLD_MINUTES:-25} * 60 ))
+  stop_runner
+  exit 0
+fi
+
 # STREAM=mjpeg|h264: how many simulators this machine can show at once. One
 # simulator more at each level, each with a viewer on this machine through the
 # runner's screen route (each started with "screen": "mjpeg", the on-device
