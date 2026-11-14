@@ -34,10 +34,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # mobai-ci-exp2: a test build whose capture mode a file picks, with
-          # a strict frame cap timer and a user-interactive capture queue.
-          gh release download runner-test -R "$GITHUB_REPOSITORY" -D bin -p mobai-ci-exp2 -p xcfast
-          mv bin/mobai-ci-exp2 bin/mobai-ci
+          # mobai-ci-exp3: a test build whose capture mode a file picks, and
+          # which logs each step from a touch to the published frame (LATB).
+          gh release download runner-test -R "$GITHUB_REPOSITORY" -D bin -p mobai-ci-exp3 -p xcfast
+          mv bin/mobai-ci-exp3 bin/mobai-ci
           chmod +x bin/*
 
       - name: Restore the xcfast cache

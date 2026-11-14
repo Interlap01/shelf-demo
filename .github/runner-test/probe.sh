@@ -126,6 +126,7 @@ if [ "${LAT:-}" = 1 ]; then
       lat "$mode ($round)"
       sleep 3
       grep "stream: [0-9.]* fps" runner.log | tail -3 | sed "s/^/STATS $mode ($round) /" | tee -a "$LOG"
+      grep "LATB" runner.log | tail -40 | sed "s/^/STEPS $mode ($round) /" | tee -a "$LOG"
     done
   done
   say "HOLD $(date -u +%H:%M:%S)"
