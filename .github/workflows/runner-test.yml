@@ -10,9 +10,8 @@ on:
 
 jobs:
   runner:
-    # The paid M2 machine with GPU acceleration, once.
-    runs-on: macos-latest-xlarge
-    timeout-minutes: 40
+    runs-on: macos-latest
+    timeout-minutes: 50
     permissions:
       contents: write # reads the draft release
     strategy:
@@ -21,7 +20,7 @@ jobs:
         stream: [latency]
         quiet: ["0"]
         bg: ["0"]
-        rep: [1]
+        rep: [1, 2, 3]
     steps:
       - uses: actions/checkout@v7
 
@@ -38,10 +37,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # mobai-ci-fix: the strict frame cap timer, and the runner quieting
-          # a GitHub-hosted Mac by itself.
-          gh release download runner-test -R "$GITHUB_REPOSITORY" -D bin -p mobai-ci-fix -p xcfast
-          mv bin/mobai-ci-fix bin/mobai-ci
+          # mobai-ci-frames: main plus frame accounting, and a frame cap and
+          # size per capture from /tmp/mobai-simshare-mode.
+          gh release download runner-test -R "$GITHUB_REPOSITORY" -D bin -p mobai-ci-frames -p xcfast
+          mv bin/mobai-ci-frames bin/mobai-ci
           chmod +x bin/*
 
       - name: Restore the xcfast cache
@@ -57,11 +56,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           LAT: "1"
           HOLD_MINUTES: "0"
-          CAPTURE_MODES: "half"
+          CAPTURE_MODES: "cap30 cap60 nocap full30"
           QUIET: ${{ matrix.quiet }}
           BG: ${{ matrix.bg }}
           BAND: "0"
-          PAIRED: "1"
+          PAIRED: "0"
           MAX_SIMS: "3"
           LABEL: "runner latency"
         run: bash .github/runner-test/probe.sh
