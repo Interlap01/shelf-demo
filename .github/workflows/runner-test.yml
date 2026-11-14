@@ -19,7 +19,7 @@ jobs:
       matrix:
         stream: [latency]
         quiet: ["0"]
-        bg: ["0", "1"]
+        bg: ["0"]
         rep: [1, 2]
     steps:
       - uses: actions/checkout@v7
@@ -59,6 +59,7 @@ jobs:
           CAPTURE_MODES: "half"
           QUIET: ${{ matrix.quiet }}
           BG: ${{ matrix.bg }}
+          BAND: "1"
           MAX_SIMS: "3"
           LABEL: "runner latency"
         run: bash .github/runner-test/probe.sh

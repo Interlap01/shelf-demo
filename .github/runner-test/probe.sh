@@ -108,6 +108,40 @@ stop_runner() { curl -s -X POST "$API/stop" | jq -c .; for _ in $(seq 1 60); do 
 for _ in $(seq 1 400); do curl -sf "$API/health" >/dev/null && break; sleep 2; done
 echo "STAGE runner API up $(since "$T0") after start"
 
+# BAND=1: do rebuilds get slower with the Mac's services in the background
+# band? On one machine, so its luck counts for both: a warm-up rebuild, then
+# three pairs of rebuilds with the band off and on. Each switch is timed, and
+# checked by counting processes at priority 4 (the band's).
+if [ "${BAND:-}" = 1 ]; then
+  ms() { perl -MTime::HiRes=time -e 'printf "%.0f", time*1000'; }
+  at4() { ps -Ao pri= | awk '$1==4' | wc -l | tr -d ' '; }
+  keep='CoreSimulator|/Simulator|mobai-ci|xcfast|VTEncoder|VTDecoder|VideoToolbox|WindowServer|Runner\.|kernel_task|^/sbin/launchd$|(^|/)(node|bash|sh|zsh|sudo|ps|sed|tee|grep|awk|top|curl|gh|jq|tar|sleep|perl|taskpolicy)$'
+  band_on() {
+    local t=$(ms)
+    ps -Ao pid=,comm= | while read -r pid comm; do echo "$comm" | grep -qE "$keep" || echo "$pid"; done > band.pids
+    sudo -n bash -c 'for p in $(cat band.pids); do taskpolicy -b -p "$p" 2>/dev/null; done'
+    echo "BAND on: $(wc -l < band.pids | tr -d ' ') processes in $(( $(ms) - t ))ms, now $(at4) at priority 4"
+  }
+  band_off() {
+    local t=$(ms)
+    sudo -n bash -c 'for p in $(cat band.pids); do taskpolicy -B -p "$p" 2>/dev/null; done'
+    echo "BAND off: in $(( $(ms) - t ))ms, now $(at4) at priority 4"
+  }
+  curl -s -X POST "$API/simulators" -H 'Content-Type: application/json' -d '{}' >/dev/null
+  wait_ready s1 900 || exit 1
+  echo "BAND before: $(at4) at priority 4"
+  sleep 30
+  touch Sources/Views.swift; echo "BAND warm-up: $(rebuild s1)"
+  for pair in 1 2 3; do
+    touch Sources/Views.swift; echo "BAND pair $pair, off: $(rebuild s1)"
+    band_on
+    touch Sources/Views.swift; echo "BAND pair $pair, on: $(rebuild s1)"
+    band_off
+  done
+  stop_runner
+  exit 0
+fi
+
 # LAT=1: how fast the screen answers a finger (latency.mjs on this machine,
 # through s1's H.264 socket), step by step: as it is, with the Mac's Spotlight
 # indexing off, with two more idle simulators. Then held HOLD_MINUTES so it
