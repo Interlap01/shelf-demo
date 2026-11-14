@@ -42,7 +42,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           HOLD: "1"
           HOLD_MINUTES: "30"
-          PHASES: "1"
+          PHASES: "0"
         run: bash .github/runner-test/probe.sh
 
       - name: Save the xcfast cache
