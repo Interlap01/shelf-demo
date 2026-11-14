@@ -118,16 +118,16 @@ if [ "${LAT:-}" = 1 ]; then
   curl -s -X POST "$API/simulators" -H 'Content-Type: application/json' -d '{"screen":"h264"}' >/dev/null
   wait_ready s1 900 && say "s1 ready $(since "$T0") after start"
   sleep 60
-  lat "1 sim"
-  sudo mdutil -a -i off 2>&1 | tee -a "$LOG"
-  sleep 30
-  lat "1 sim, Spotlight indexing off"
-  for k in 2 3; do
-    curl -s -X POST "$API/simulators" -H 'Content-Type: application/json' -d '{"screen":"h264"}' >/dev/null
-    wait_ready "s$k" 900 && say "s$k ready"
+  # CAPTURE_MODES (test build only): each new capture reads its mode from
+  # /tmp/mobai-simshare-mode, and every latency run opens a new one.
+  for round in 1 2; do
+    for mode in ${CAPTURE_MODES:-half}; do
+      echo "$mode" > /tmp/mobai-simshare-mode
+      lat "$mode ($round)"
+      sleep 3
+      grep "stream: [0-9.]* fps" runner.log | tail -3 | sed "s/^/STATS $mode ($round) /" | tee -a "$LOG"
+    done
   done
-  sleep 60
-  lat "3 sims (2 idle)"
   say "HOLD $(date -u +%H:%M:%S)"
   sleep $(( ${HOLD_MINUTES:-15} * 60 ))
   kill "$LOADS"
