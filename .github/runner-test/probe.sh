@@ -86,7 +86,7 @@ fi
 # --duration is long so no simulator closes for being unused mid-test.
 # Every runner line gets the time, to line it up with the viewer's side.
 ./bin/mobai-ci runner --xcfast "$PWD/bin/xcfast" \
-  --duration 45m --max-duration 50m --max-simulators "${MAX_SIMS:-3}" --max-fps "${MAX_FPS:-30}" \
+  --duration 45m --max-duration 50m --max-simulators "${MAX_SIMS:-3}" --max-fps "${MAX_FPS:-30}" --screen "${STREAM:-h264}" \
   --label "${GITHUB_REPOSITORY} runner test" 2>&1 \
   | while IFS= read -r l; do echo "$(date -u +%H:%M:%S) $l"; done | tee runner.log | sed 's/^/RUNNER /' &
 PID=$!
@@ -99,9 +99,10 @@ for _ in $(seq 1 400); do curl -sf "$API/health" >/dev/null && break; sleep 2; d
 echo "STAGE runner API up $(since "$T0") after start"
 
 # STREAM=mjpeg|h264: how many simulators this machine can show at once. One
-# simulator more at each level, each with a viewer on this machine (MJPEG from
-# its on-device runner, or the runner's H.264). Every level is measured with
-# the screens still, then with a page that redraws every frame on all of them.
+# simulator more at each level, each with a viewer on this machine through the
+# runner's screen route (--screen mjpeg: the on-device runner's frames, h264:
+# the runner's encoder). Every level is measured with the screens still, then
+# switching between light and dark every second on all of them.
 # The log goes to the draft release every 15s, since a machine that hangs
 # never hands its job log back.
 if [ -n "${STREAM:-}" ]; then
@@ -114,25 +115,11 @@ if [ -n "${STREAM:-}" ]; then
   UPLOADER=$!
   ( while :; do say "LOAD $(date -u +%H:%M:%S) $(sysctl -n vm.loadavg) swap $(sysctl -n vm.swapusage | awk '{print $6}')"; sleep 5; done ) &
   LOADS=$!
-  mkdir -p anim
-  cat > anim/index.html <<'EOF'
-<meta name="viewport" content="width=device-width">
-<style>body{margin:0;font:700 64px -apple-system;display:grid;place-items:center;height:100vh}
-#b{width:160px;height:160px;background:#e33;animation:s 1s linear infinite}
-@keyframes s{to{transform:rotate(360deg)}}</style>
-<div><div id="b"></div><p id="n">0</p></div>
-<script>let i=0;(function f(){document.getElementById('n').textContent=++i;requestAnimationFrame(f)})()</script>
-EOF
-  (cd anim && python3 -m http.server 8765 --bind 127.0.0.1 >/dev/null 2>&1 &)
-  # The port the simulator's on-device runner serves MJPEG on: a listening
-  # port of a process inside that simulator that answers multipart.
-  mjpeg_port() {
-    lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | awk 'NR>1{print $2, $9}' | sort -u | while read -r pid addr; do
-      ps -o args= -p "$pid" 2>/dev/null | grep -q "$1" || continue
-      p=${addr##*:}
-      echo "MJPEG? s$2 pid $pid port $p: $(curl -s -m 8 -D - -o /dev/null "http://127.0.0.1:$p/?fps=30" 2>/dev/null | grep -i '^content-type' | tr -d '\r')" >> "$LOG"
-      curl -s -m 8 -D - -o /dev/null "http://127.0.0.1:$p/?fps=30" 2>/dev/null | grep -qi multipart && { echo "$p"; return; }
-    done
+  # Every Spotlight process with its path and memory, to tell the Mac's own
+  # from each simulator's.
+  spotlight() {
+    ps -axo pid=,rss=,args= | grep -E "Spotlight|mds_stores|mdworker" | grep -v grep \
+      | awk -v t="$1" '{printf "SPOT %s %6.0f MB %s\n", t, $2/1024, substr($0, index($0,$3))}' | cut -c1-220 | tee -a "$LOG"
   }
   udids=()
   for k in $(seq 1 "${MAX_SIMS:-5}"); do
@@ -145,9 +132,7 @@ EOF
     say "LEVEL $k: s$k ready in $(since "$T")"
     mem "with $k simulators" | tee -a "$LOG"
     if [ "$STREAM" = mjpeg ]; then
-      p=$(mjpeg_port "$u" "$k")
-      [ -n "$p" ] || { say "LEVEL $k: no MJPEG port found for s$k"; break; }
-      node .github/runner-test/watch.mjs mjpeg "s$k" "http://127.0.0.1:$p/?fps=30&scale=50&quality=50" | tee -a "$LOG" &
+      node .github/runner-test/watch.mjs mjpeg "s$k" "$API/simulators/s$k/screen/mjpeg?fps=30&scale=50&quality=50" | tee -a "$LOG" &
     else
       node .github/runner-test/watch.mjs h264 "s$k" "ws://127.0.0.1:7101/simulators/s$k/screen/ws" | tee -a "$LOG" &
     fi
@@ -155,6 +140,7 @@ EOF
     say "LEVEL $k still $(date -u +%H:%M:%S)"
     sleep 30
     top -l 2 -s 2 -n 10 -o cpu -stats command,cpu,mem | awk '/^PID|^COMMAND/{c++; next} c==2&&NF' | sed "s/^/TOP $k still /" | tee -a "$LOG"
+    spotlight "$k still"
     say "LEVEL $k moving $(date -u +%H:%M:%S)"
     # Light and dark in turn every second: the whole screen redraws, without
     # the redrawing web page, which took 5 GB in SimRenderServer and froze
@@ -165,6 +151,7 @@ EOF
     sleep 40
     top -l 2 -s 2 -n 10 -o cpu -stats command,cpu,mem | awk '/^PID|^COMMAND/{c++; next} c==2&&NF' | sed "s/^/TOP $k moving /" | tee -a "$LOG"
     mem "moving, $k simulators" | tee -a "$LOG"
+    spotlight "$k moving"
     kill "$TOGGLE"; wait "$TOGGLE" 2>/dev/null
     for u2 in "${udids[@]}"; do xcrun simctl ui "$u2" appearance light; done
     say "LEVEL $k done $(date -u +%H:%M:%S)"
