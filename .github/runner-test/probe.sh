@@ -130,7 +130,8 @@ EOF
     lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | awk 'NR>1{print $2, $9}' | sort -u | while read -r pid addr; do
       ps -o args= -p "$pid" 2>/dev/null | grep -q "$1" || continue
       p=${addr##*:}
-      curl -s -m 1 -D - -o /dev/null "http://127.0.0.1:$p/?fps=30" 2>/dev/null | grep -qi multipart && { echo "$p"; return; }
+      echo "MJPEG? s$2 pid $pid port $p: $(curl -s -m 8 -D - -o /dev/null "http://127.0.0.1:$p/?fps=30" 2>/dev/null | grep -i '^content-type' | tr -d '\r')" >> "$LOG"
+      curl -s -m 8 -D - -o /dev/null "http://127.0.0.1:$p/?fps=30" 2>/dev/null | grep -qi multipart && { echo "$p"; return; }
     done
   }
   udids=()
@@ -144,7 +145,7 @@ EOF
     say "LEVEL $k: s$k ready in $(since "$T")"
     mem "with $k simulators" | tee -a "$LOG"
     if [ "$STREAM" = mjpeg ]; then
-      p=$(mjpeg_port "$u")
+      p=$(mjpeg_port "$u" "$k")
       [ -n "$p" ] || { say "LEVEL $k: no MJPEG port found for s$k"; break; }
       node .github/runner-test/watch.mjs mjpeg "s$k" "http://127.0.0.1:$p/?fps=30&scale=50&quality=50" | tee -a "$LOG" &
     else
@@ -155,10 +156,17 @@ EOF
     sleep 30
     top -l 2 -s 2 -n 10 -o cpu -stats command,cpu,mem | awk '/^PID|^COMMAND/{c++; next} c==2&&NF' | sed "s/^/TOP $k still /" | tee -a "$LOG"
     say "LEVEL $k moving $(date -u +%H:%M:%S)"
-    for u2 in "${udids[@]}"; do xcrun simctl openurl "$u2" http://127.0.0.1:8765/ & done
+    # Light and dark in turn every second: the whole screen redraws, without
+    # the redrawing web page, which took 5 GB in SimRenderServer and froze
+    # the machine in swap.
+    ( n=0; while :; do n=$((n + 1)); a=light; [ $((n % 2)) = 1 ] && a=dark
+        for u2 in "${udids[@]}"; do xcrun simctl ui "$u2" appearance "$a" & done; wait; sleep 1; done ) &
+    TOGGLE=$!
     sleep 40
     top -l 2 -s 2 -n 10 -o cpu -stats command,cpu,mem | awk '/^PID|^COMMAND/{c++; next} c==2&&NF' | sed "s/^/TOP $k moving /" | tee -a "$LOG"
-    for u2 in "${udids[@]}"; do xcrun simctl terminate "$u2" com.apple.mobilesafari & done
+    mem "moving, $k simulators" | tee -a "$LOG"
+    kill "$TOGGLE"; wait "$TOGGLE" 2>/dev/null
+    for u2 in "${udids[@]}"; do xcrun simctl ui "$u2" appearance light; done
     say "LEVEL $k done $(date -u +%H:%M:%S)"
   done
   pkill -f watch.mjs
