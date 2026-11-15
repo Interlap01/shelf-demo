@@ -105,8 +105,12 @@ fi
 if [ "${SHARE:-}" = 1 ]; then
   UDID=$(./bin/mobai-ci sim boot --name share-test | tail -1)
   echo "SHARE simulator $UDID"
+  # Signed to run locally, as the CI tests workflow builds: slim auto reads
+  # the entitlements, which reach the app only through signing.
   xcodebuild -project Shelf.xcodeproj -scheme Shelf -configuration Debug -sdk iphonesimulator \
-    -derivedDataPath build build -quiet >/dev/null 2>&1 || echo "SHARE build failed"
+    -derivedDataPath build CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- \
+    CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= PROVISIONING_PROFILE_SPECIFIER= \
+    build -quiet >/dev/null 2>&1 || echo "SHARE build failed"
   APP=$(ls -d build/Build/Products/Debug-iphonesimulator/*.app | head -1)
   echo "SHARE app $APP"
   ./bin/mobai-ci share --device "$UDID" --app "$APP" --duration 20m \
