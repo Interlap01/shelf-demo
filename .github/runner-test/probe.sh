@@ -99,14 +99,17 @@ if [ "${QUIET:-}" = 1 ]; then
   echo "quiet: Spotlight indexing and software update checks off"
 fi
 
-# SHARE=1: mobai-ci share instead of the runner: a stock simulator shared for
-# someone to open in the MobAI app, asking for H.264. The account's plan
-# decides what it gets (Pro: H.264 and the quieted Mac; others: MJPEG).
+# SHARE=1: mobai-ci share instead of the runner, run as a plain workflow
+# would: the built app, no ports and no tunnel step. Share slims the
+# simulator for the app, and on Pro opens the tunnel itself for H.264.
 if [ "${SHARE:-}" = 1 ]; then
   UDID=$(./bin/mobai-ci sim boot --name share-test | tail -1)
   echo "SHARE simulator $UDID"
-  ./bin/mobai-ci tunnel start
-  ./bin/mobai-ci share --device "$UDID" --screen h264 --screen-port 7102 --duration 20m \
+  xcodebuild -project Shelf.xcodeproj -scheme Shelf -configuration Debug -sdk iphonesimulator \
+    -derivedDataPath build build -quiet >/dev/null 2>&1 || echo "SHARE build failed"
+  APP=$(ls -d build/Build/Products/Debug-iphonesimulator/*.app | head -1)
+  echo "SHARE app $APP"
+  ./bin/mobai-ci share --device "$UDID" --app "$APP" --duration 20m \
     --label "${GITHUB_REPOSITORY} share test" 2>&1 | sed 's/^/SHARE /'
   ps -Ao pri=,comm= | awk '$1==4' | wc -l | sed 's/^/SHARE processes at priority 4: /'
   exit 0
