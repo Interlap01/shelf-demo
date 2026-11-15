@@ -99,6 +99,19 @@ if [ "${QUIET:-}" = 1 ]; then
   echo "quiet: Spotlight indexing and software update checks off"
 fi
 
+# SHARE=1: mobai-ci share instead of the runner: a stock simulator shared for
+# someone to open in the MobAI app, asking for H.264. The account's plan
+# decides what it gets (Pro: H.264 and the quieted Mac; others: MJPEG).
+if [ "${SHARE:-}" = 1 ]; then
+  UDID=$(./bin/mobai-ci sim boot --name share-test | tail -1)
+  echo "SHARE simulator $UDID"
+  ./bin/mobai-ci tunnel start
+  ./bin/mobai-ci share --device "$UDID" --screen h264 --screen-port 7102 --duration 20m \
+    --label "${GITHUB_REPOSITORY} share test" 2>&1 | sed 's/^/SHARE /'
+  ps -Ao pri=,comm= | awk '$1==4' | wc -l | sed 's/^/SHARE processes at priority 4: /'
+  exit 0
+fi
+
 # PAIRED=1: the processes already at priority 4 (the background band's)
 # before the runner starts, so the ones it moves can be told apart.
 [ "${PAIRED:-}" = 1 ] && ps -Ao pid=,pri= | awk '$2==4{print $1}' | sort > base4.pids
