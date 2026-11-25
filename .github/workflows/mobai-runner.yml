@@ -1,0 +1,89 @@
+name: MobAI Runner
+run-name: MobAI Runner ${{ inputs.host_id }}
+
+# A MobAI runner on a GitHub Mac: mobai-ci runner, which builds this
+# repository's app and runs iOS simulators for the MobAI app. The setup
+# (Xcode, Flutter, Node, packages) is MobAI's action, so this file rarely
+# changes. It needs the MOBAI_API_KEY secret of a MobAI Pro account.
+#
+# MobAI wrote this file. Update it from MobAI rather than by hand.
+
+on:
+  workflow_dispatch:
+    inputs:
+      host_id:
+        description: 'The id MobAI reaches this runner by (its tunnel id)'
+        required: true
+        type: string
+      ios_path:
+        description: 'Path to the iOS project (e.g. "ios" for React Native)'
+        required: false
+        type: string
+        default: '.'
+      grace:
+        description: 'How long the runner stays after its last simulator closed and its last build ended (e.g. 2m)'
+        required: false
+        type: string
+        default: '2m'
+      simulator_idle:
+        description: 'How long a simulator stays unused before it closes (e.g. 10m)'
+        required: false
+        type: string
+        default: '10m'
+      runs_on:
+        description: 'Where the job runs, as JSON: "macos-latest", or a self-hosted runner''s labels such as ["self-hosted", "macOS"]'
+        required: false
+        type: string
+        default: '"macos-latest"'
+      keep:
+        description: 'Stay up until stopped from MobAI (a self-hosted runner)'
+        required: false
+        type: boolean
+        default: false
+      toolchain:
+        description: 'Tool versions as JSON: {"flutter": "3.24.0", "node": "24"}'
+        required: false
+        type: string
+        default: '{}'
+
+concurrency:
+  group: mobai-runner-${{ inputs.host_id }}
+
+jobs:
+  runner:
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
+    # write: an iPhone build's IPA goes back to MobAI as a draft release,
+    # which MobAI deletes once it has the file.
+    permissions:
+      contents: write
+    timeout-minutes: ${{ inputs.keep && 4320 || 360 }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: MobAI-App/mobai-ci/runner@v1
+        with:
+          ios_path: ${{ inputs.ios_path }}
+          toolchain: ${{ inputs.toolchain }}
+      - name: Run the runner
+        env:
+          MOBAI_API_KEY: ${{ secrets.MOBAI_API_KEY }}
+          MOBAI_SIGNING_DEVELOPMENT: ${{ secrets.MOBAI_SIGNING_DEVELOPMENT }}
+          MOBAI_SIGNING_DISTRIBUTION: ${{ secrets.MOBAI_SIGNING_DISTRIBUTION }}
+          MOBAI_GITHUB_TOKEN: ${{ github.token }}
+          HOST_ID: ${{ inputs.host_id }}
+          GRACE: ${{ inputs.grace }}
+          SIM_IDLE: ${{ inputs.simulator_idle }}
+          KEEP: ${{ inputs.keep }}
+        run: |
+          if [ "$KEEP" = "true" ]; then
+            mobai-ci runner --host-id "$HOST_ID" --keep --duration "${SIM_IDLE:-10m}" --label "$GITHUB_REPOSITORY"
+          else
+            mobai-ci runner --host-id "$HOST_ID" --grace "${GRACE:-2m}" --duration "${SIM_IDLE:-10m}" --max-duration 350m --label "$GITHUB_REPOSITORY"
+          fi
+      - name: Save the compile cache
+        if: always()
+        uses: actions/cache/save@v6
+        with:
+          path: ~/Library/Caches/mobai/xcode-cache
+          key: mobai-xcode-cache-${{ github.run_id }}
